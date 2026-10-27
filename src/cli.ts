@@ -1,0 +1,72 @@
+#!/usr/bin/env node
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import chalk from "chalk";
+import { type CliOptions, helpText, parseArgs } from "./args.js";
+import { errorMessage } from "./errors.js";
+import { haunt } from "./haunt.js";
+import { printTerminal, renderMarkdown } from "./report.js";
+
+export async function main(argv: readonly string[]): Promise<number> {
+  let options: CliOptions;
+  try {
+    options = parseArgs(argv);
+  } catch (error) {
+    console.error(errorMessage(error));
+    return 1;
+  }
+
+  if (options.help) {
+    console.log(helpText());
+    return 0;
+  }
+
+  const major = Number(process.versions.node.split(".")[0]);
+  if (!Number.isFinite(major) || major < 20) {
+    console.error("Exorcist needs Node.js 20 or newer.");
+    return 1;
+  }
+
+  try {
+    const report = await haunt(options.targetPath, {
+      model: options.model,
+      endpoint: options.endpoint,
+      consultOracle: options.consultOracle,
+    });
+    printTerminal(report);
+    const reportFile = resolve(options.reportPath);
+    mkdirSync(dirname(reportFile), { recursive: true });
+    writeFileSync(reportFile, renderMarkdown(report), "utf8");
+    console.log("");
+    console.log(chalk.dim(`wrote ${reportFile}`));
+    return 0;
+  } catch (error) {
+    console.error(chalk.red(errorMessage(error)));
+    return 1;
+  }
+}
+
+function isEntrypoint(): boolean {
+  if (process.env.VITEST) return false;
+  const entry = process.argv[1];
+  if (!entry) return false;
+  const file = fileURLToPath(import.meta.url);
+  try {
+    if (realpathSync(entry) === realpathSync(file)) return true;
+  } catch {
+    // argv[1] can be a path that does not exist yet.
+  }
+  return resolve(entry) === file;
+}
+
+if (isEntrypoint()) {
+  main(process.argv.slice(2))
+    .then((code) => {
+      process.exit(code);
+    })
+    .catch((error: unknown) => {
+      console.error(errorMessage(error));
+      process.exitCode = 1;
+    });
+}
