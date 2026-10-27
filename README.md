@@ -2,7 +2,7 @@
 
 Exorcist scans an npm project's **installed** dependencies for malicious or risky packages. Cheap rules flag suspects. Only those suspects are shown to **Gemma**, running locally through **Ollama**, which reads the flagged code and returns a verdict: benign, suspicious, or malicious.
 
-It is a Day 1 skeleton for the DEV Hacktoberfest Open-Source AI Challenge, "Ghost in the Machine" (deadline Sat Oct 31, 2026).
+It is a small scanner for the DEV Hacktoberfest Open-Source AI Challenge, "Ghost in the Machine" (deadline Sat Oct 31, 2026). Poltergeist and phantom are the rules that flag packages today.
 
 The code it reads may be private. The model runs on your machine, the scan works with the network unplugged, and nothing here calls a cloud LLM API.
 
@@ -40,12 +40,12 @@ After `npm run build`, the same scan is `node dist/cli.js demo/victim`.
 
 What you should see on `demo/victim`:
 
-| Package         | Why it shows up today                                | Exorcism without Gemma |
-| --------------- | ---------------------------------------------------- | ---------------------- |
-| `soul-snatcher` | `postinstall` plus `process.env` and a base64 encode | remove (score 77)      |
-| `hexed-helper`  | `eval` of a base64 blob, and a long base64 literal   | pin (score 44)         |
-| `lodasg`        | imports `child_process` and never calls it           | pin (score 28)         |
-| `lucky-charm`   | nothing                                              | quiet (score 0)        |
+| Package         | Why it shows up                                                                 | Exorcism without Gemma |
+| --------------- | ------------------------------------------------------------------------------- | ---------------------- |
+| `soul-snatcher` | `postinstall`, `process.env`, a base64 encode, and never imported              | remove (score 93)      |
+| `hexed-helper`  | `eval` of a base64 blob, a long base64 literal, and never imported             | remove (score 60)      |
+| `lodasg`        | imports `child_process` and never calls it, and the app never imports `lodasg` | remove (score 44)      |
+| `lucky-charm`   | imported by `src/app.js`, and no risky API                                      | quiet (score 0)        |
 
 `lodasg` is a typosquat of `lodash` (the final `h` changed to `g`). The doppelganger rule is still a stub, so the name is **not** why it is flagged. See [docs/STATUS.md](docs/STATUS.md).
 
@@ -88,14 +88,14 @@ Everything under `demo/packages/` is a private fixture. None of it phones home.
 - `lodasg` — typosquat name, plus an unused `child_process` import so today's rule still flags it.
 - `hexed-helper` — `mutter()` would `eval` a base64 string that decodes to `console.log("boo")`. Nothing calls `mutter()`. A second literal is a long harmless base64 blob.
 - `lucky-charm` — returns `"horseshoe"`. The quiet control.
-- `demo/victim/src/app.js` — imports only `lucky-charm`. That file is for the future phantom rule. Exorcist does not scan the victim's own source today.
+- `demo/victim/src/app.js` — imports only `lucky-charm`. Phantom reads this file. `soul-snatcher`, `hexed-helper`, and `lodasg` are installed and never referenced, so each one is a phantom finding on top of whatever poltergeist already found.
 
 If you skip `npm install` in `demo/victim`, the committed lockfile still points at the fixtures with `link: true`, and the resolver follows those paths. Install once if you want `node_modules` populated.
 
 ## How a scan runs
 
 1. Read `package-lock.json` and list installed packages (name, version, path, `package.json`).
-2. Run every rule. Only **poltergeist** flags anything today. The other three return no findings.
+2. Run every rule. **Poltergeist** flags risky install scripts and APIs. **Phantom** flags a direct dependency the project never imports or names in a script. Doppelganger and revenant return no findings.
 3. If Ollama is up and the model is pulled, send each haunted package's snippets to Gemma and validate the JSON verdict.
 4. Score each haunted package from 0 to 100 and pick an exorcism: `pin`, `remove`, or `swap`.
 5. Print the terminal report and write `haunting-report.md`.

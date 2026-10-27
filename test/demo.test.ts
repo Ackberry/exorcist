@@ -7,7 +7,7 @@ import { runRules } from "../src/scanner.js";
 const victimDir = join(dirname(fileURLToPath(import.meta.url)), "../demo/victim");
 
 describe("demo victim", () => {
-  it("flags the possessed fixtures from poltergeist and leaves lucky-charm quiet", async () => {
+  it("flags possessed fixtures from poltergeist, and unused ones from phantom", async () => {
     const packages = resolveInstalled(victimDir);
     const findings = await runRules(packages, victimDir);
 
@@ -20,13 +20,31 @@ describe("demo victim", () => {
 
     const haunted = [...new Set(findings.map((finding) => finding.packageName))].sort();
     expect(haunted).toEqual(["hexed-helper", "lodasg", "soul-snatcher"]);
-    // Tripwire for Wednesday: doppelganger, revenant, and phantom are stubs.
-    // When one of them starts flagging these fixtures, update this assertion.
-    expect(findings.every((finding) => finding.rule === "poltergeist")).toBe(true);
+    // lucky-charm is imported by demo/victim/src/app.js. The other three are not.
+    expect(findings.some((finding) => finding.packageName === "lucky-charm")).toBe(false);
+
+    const phantoms = findings
+      .filter((finding) => finding.rule === "phantom")
+      .map((finding) => finding.packageName)
+      .sort();
+    expect(phantoms).toEqual(["hexed-helper", "lodasg", "soul-snatcher"]);
+    expect(
+      findings
+        .filter((finding) => finding.rule === "phantom")
+        .every((finding) => finding.severity === "medium"),
+    ).toBe(true);
+    expect(findings.some((finding) => finding.rule === "doppelganger")).toBe(false);
+    expect(findings.some((finding) => finding.rule === "revenant")).toBe(false);
+
     expect(
       findings.some(
         (finding) =>
           finding.packageName === "soul-snatcher" && finding.title === "runs a postinstall script",
+      ),
+    ).toBe(true);
+    expect(
+      findings.some(
+        (finding) => finding.packageName === "soul-snatcher" && finding.rule === "phantom",
       ),
     ).toBe(true);
     expect(findings.some((finding) => finding.packageName === "lodasg")).toBe(true);

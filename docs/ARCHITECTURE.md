@@ -31,6 +31,8 @@ package-lock.json
 
 `src/haunt.ts` is the function that runs those steps. `src/cli.ts` parses argv and writes the file. Library callers can use `haunt` from `src/index.ts` without the CLI.
 
+Phantom is the rule that reads the target project's own source. The other rules only see installed packages.
+
 Calls to the model are sequential, one per haunted package, so a laptop-sized Ollama is not handed the whole tree at once. Quiet packages are never sent.
 
 ## Modules
@@ -39,10 +41,10 @@ Calls to the model are sequential, one per haunted package, so a laptop-sized Ol
 | --------------------------- | ----------------------------------------------------------------------------------------------- |
 | `src/types.ts`              | Shared types: packages, findings, rules, judgments, the report.                                 |
 | `src/resolver.ts`           | Lockfile v2/v3 to `InstalledPackage[]`.                                                         |
-| `src/rules/poltergeist.ts`  | The only rule that flags packages today.                                                        |
+| `src/rules/poltergeist.ts`  | Install scripts and risky APIs inside installed packages.                                       |
 | `src/rules/doppelganger.ts` | Stub. Exports `POPULAR_PACKAGES` for the next implementation.                                   |
 | `src/rules/revenant.ts`     | Stub. Registry lookup is not implemented.                                                       |
-| `src/rules/phantom.ts`      | Stub. Import graph is not implemented.                                                          |
+| `src/rules/phantom.ts`      | Direct dependency the project never imports or names in a script.                               |
 | `src/rules/index.ts`        | `rules` array, in the order findings are collected.                                             |
 | `src/scanner.ts`            | Runs every rule. One rule throwing fails the scan, with the rule name and package in the error. |
 | `src/oracle.ts`             | Ollama client, prompt, truncation, JSON validation.                                             |
@@ -129,6 +131,33 @@ Walk limits (`POLTERGEIST_LIMITS`):
 
 The root project is not scanned. Only installed packages are.
 
+## Phantom
+
+Phantom flags a **direct** dependency the project declares and installs but never references. Transitive packages are ignored. The walk reads the target project, not dependency source.
+
+A package is referenced when any of these is true:
+
+- Project source has `import` / `export ... from`, a dynamic `import()`, `require()`, or `require.resolve()` whose specifier is that package. `pkg/sub` and `@scope/pkg/sub` count as `pkg` and `@scope/pkg`. Relative paths and `node:` built-ins do not.
+- The root `package.json` `scripts` values contain the package name as a shell token (`name`, `name/sub`, or `name@version`), or a path under `node_modules/<name>`.
+- Those scripts invoke a `bin` from the installed package's `package.json`. A string `bin` uses the unscoped package name. Shell words such as `node` and `npm` are not bins.
+
+`dependencies` and `optionalDependencies` are severity `medium` (16 points). `devDependencies` are severity `low` (8). A dev tool is lower confidence because a config file this rule does not parse can still load it. The title is `installed but never imported`. Evidence is the declaration line from the project `package.json` (`"name": "spec"`), with `evidencePath` `package.json`.
+
+Source files are `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.tsx`, `.mts`, `.cts`, including `.d.ts` and dotfiles such as `.eslintrc.js`. The walk skips `node_modules`, `dist`, `coverage`, `build`, and any dot-directory (so `.git` and `.next` are skipped). Caps (`PHANTOM_LIMITS`): 300 files, 512 KiB each, depth 8. The usage walk is memoized on the `ScanContext` for one `runRules` pass.
+
+This is a lexer, not a JavaScript parser. Comments and ordinary strings are not uses. A `require()` or `import()` inside a template `${...}` is a use; the same text sitting in the template as characters is not. Known misses and false alarms:
+
+- `require(someVariable)` and `import(someVariable)` are not resolved, so a real use can look unused.
+- `obj.require("pkg")` is ignored.
+- A regex literal containing `//` or `/*` can swallow later source.
+- The `from` clause is searched for about 800 characters.
+- `.vue`, `.svelte`, JSON, and YAML are not read, except root `package.json` scripts. A plugin named only in `.eslintrc.json` can be flagged.
+- TypeScript path aliases are treated as package names. An alias equal to a dependency name counts as a use.
+- An import that lives only in a skipped directory, a file over 512 KiB, or past the 300-file cap is invisible, so that dependency is flagged.
+- Symlinked source files are not followed. If the package directory is missing, `bin` names are unknown.
+
+On the demo, `demo/victim/src/app.js` imports `lucky-charm` and does not reference `soul-snatcher`, `hexed-helper`, or `lodasg`. Those three get a phantom finding. `lucky-charm` does not.
+
 ## Score and exorcism
 
 Rule weights (`SEVERITY_WEIGHTS`):
@@ -154,14 +183,17 @@ The result is clamped to 0–100 and rounded. The oracle never removes a package
 Exorcism, in order:
 
 1. **remove** when the verdict is `malicious` with confidence ≥ `0.5` (`MALICIOUS_CONFIDENCE`), or the score is ≥ `75` (`REMOVE_SCORE`).
-2. **swap** when any finding is from `doppelganger` and remove did not win. No current rule emits that finding, so swap is unused on the demo.
-3. **pin** otherwise.
+2. **remove** when any finding is from `phantom`. An unused dependency is attack surface, so the action is remove even when the score is still low or moderate. Its severity points still add into the score, which is why an install script on an unused package scores higher than the script alone. This wins over swap.
+3. **swap** when any finding is from `doppelganger` and remove did not win. No current rule emits that finding, so swap is unused on the demo. An unused typosquat is removed by step 2 until something imports it.
+4. **pin** otherwise.
 
 On today's weights, before any oracle nudge, the demo scores are:
 
-- `soul-snatcher`: 45 + 16 + 16 = 77, remove
-- `hexed-helper`: 28 + 16 = 44, pin
-- `lodasg`: 28, pin
+- `soul-snatcher`: 45 + 16 + 16 + 16 = 93, remove (the score is already at least 75; phantom adds the last 16)
+- `hexed-helper`: 28 + 16 + 16 = 60, remove (phantom; the score alone would pin)
+- `lodasg`: 28 + 16 = 44, remove (phantom; the score alone would pin)
+
+`lucky-charm` has no findings.
 
 ## What Gemma does
 
@@ -191,4 +223,4 @@ Color follows the terminal. Piped output stays plain because chalk checks whethe
 
 ## Tests and the live model
 
-`npm test` does not start Ollama and does not pull a model. The closed-port probe test calls the real `probe()` against `127.0.0.1:1`. Judgment parsing, the chat request body, scoring, the resolver, and poltergeist have unit tests. `test/demo.test.ts` scans `demo/victim` and expects every current finding to come from poltergeist.
+`npm test` does not start Ollama and does not pull a model. The closed-port probe test calls the real `probe()` against `127.0.0.1:1`. Judgment parsing, the chat request body, scoring, the resolver, poltergeist, and phantom have unit tests. `test/demo.test.ts` scans `demo/victim` and expects poltergeist and phantom on the three unused possessed fixtures, and no findings on `lucky-charm`.
