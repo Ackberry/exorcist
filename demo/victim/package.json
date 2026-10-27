@@ -1,0 +1,15 @@
+{
+  "name": "victim",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sample project for Exorcist. Depends on local demo fixtures and nothing from the registry.",
+  "scripts": {
+    "start": "node src/app.js"
+  },
+  "dependencies": {
+    "hexed-helper": "file:../packages/hexed-helper",
+    "lodasg": "file:../packages/lodasg",
+    "lucky-charm": "file:../packages/lucky-charm",
+    "soul-snatcher": "file:../packages/soul-snatcher"
+  }
+}

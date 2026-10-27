@@ -1,0 +1,8 @@
+{
+  "name": "hexed-helper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DEMO FIXTURE. Obfuscated-looking source. mutter() is never called and only decodes console.log.",
+  "type": "commonjs",
+  "main": "index.js"
+}

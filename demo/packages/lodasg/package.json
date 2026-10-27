@@ -1,0 +1,8 @@
+{
+  "name": "lodasg",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DEMO FIXTURE. One-character typosquat of lodash (h changed to g). The doppelganger rule is still a stub; poltergeist flags the unused child_process import.",
+  "type": "commonjs",
+  "main": "index.js"
+}

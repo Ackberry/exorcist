@@ -1,0 +1,11 @@
+{
+  "name": "soul-snatcher",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DEMO FIXTURE. Harmless postinstall that pretends to pocket a dummy env var. It does not open a socket or read credential files.",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "node postinstall.js"
+  }
+}

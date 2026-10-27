@@ -1,0 +1,8 @@
+{
+  "name": "lucky-charm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DEMO FIXTURE. The quiet control. No install script and no risky APIs.",
+  "type": "commonjs",
+  "main": "index.js"
+}
