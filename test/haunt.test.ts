@@ -33,6 +33,7 @@ function project(): string {
   );
   writeJson(join(root, "node_modules/calm/package.json"), { name: "calm", version: "1.0.0" });
   writeText(join(root, "node_modules/calm/index.js"), "module.exports = 1;\n");
+  writeText(join(root, "src/app.js"), 'const calm = require("calm");\nconsole.log(calm);\n');
   return root;
 }
 

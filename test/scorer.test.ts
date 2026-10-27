@@ -78,6 +78,20 @@ describe("scorer", () => {
     expect(judgePackage(pkg, [doppel], null, null).exorcism).toBe("swap");
     expect(judgePackage(pkg, [doppel, ...severe], null, null).exorcism).toBe("remove");
 
+    const phantom = finding({
+      rule: "phantom",
+      severity: "medium",
+      title: "installed but never imported",
+    });
+    const unused = judgePackage(pkg, [phantom], null, null);
+    expect(unused.hauntingScore).toBe(SEVERITY_WEIGHTS.medium);
+    expect(unused.exorcism).toBe("remove");
+    expect(unused.exorcismReason).toContain("never imported");
+    expect(hauntingScore([finding({ severity: "critical" }), phantom], null)).toBe(
+      SEVERITY_WEIGHTS.critical + SEVERITY_WEIGHTS.medium,
+    );
+    expect(judgePackage(pkg, [phantom, doppel], null, null).exorcism).toBe("remove");
+
     const mild = [finding()];
     expect(
       judgePackage(

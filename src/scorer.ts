@@ -81,6 +81,15 @@ function exorcismFor(
       exorcismReason: `Haunting score ${score}/100 is at least ${REMOVE_SCORE}. Strongest signal: ${top.title}.`,
     };
   }
+  // Unused on its own stays a modest score. The action is still remove: the
+  // dependency is attack surface the project does not call. Its points stack
+  // with poltergeist, so an install script on an unused package scores higher.
+  if (findings.some((finding) => finding.rule === "phantom")) {
+    return {
+      exorcism: "remove",
+      exorcismReason: `Haunting score ${score}/100. ${pkg.name} is installed but never imported. Remove it. Strongest signal: ${top.title}.`,
+    };
+  }
   if (findings.some((finding) => finding.rule === "doppelganger")) {
     return {
       exorcism: "swap",

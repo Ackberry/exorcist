@@ -32,14 +32,14 @@ The four kinds already exist on `GhostKind`. You should not need a new kind for 
 3. Set `status` to `"active"` when it can flag a real package. Until then leave it `"stub"` and return `[]`.
 4. Catch network and IO problems inside the rule and return `[]` (or findings collected so far) so one bad package does not abort the scan. `revenant` must do this when the registry is unreachable.
 5. Add a unit test that builds a temp package or a temp lockfile with `test/helpers.ts`. Do not commit `node_modules`.
-6. If the demo should trip the rule, change the fixture and update `test/demo.test.ts`. That test currently requires every demo finding to come from poltergeist.
+6. If the demo should trip the rule, change the fixture and update `test/demo.test.ts`. That test names which rules flag which demo fixtures. `lucky-charm` is the package `demo/victim/src/app.js` imports. The other three fixtures are unused, so phantom flags them.
 7. Update `docs/STATUS.md` and `docs/ARCHITECTURE.md` so they describe the new behavior, including any new threshold.
 
 `ScanContext.packages` is the full install list when a rule needs to compare names. Poltergeist does not use it.
 
 ## Scoring
 
-Weights and thresholds live in `src/scorer.ts` (`SEVERITY_WEIGHTS`, `REMOVE_SCORE`, `MALICIOUS_CONFIDENCE`, `ORACLE_NUDGE`). Change them there and in `docs/ARCHITECTURE.md` together. The scorer already turns a `doppelganger` finding into `swap` unless remove wins. Do not special-case that in the CLI.
+Weights and thresholds live in `src/scorer.ts` (`SEVERITY_WEIGHTS`, `REMOVE_SCORE`, `MALICIOUS_CONFIDENCE`, `ORACLE_NUDGE`). Change them there and in `docs/ARCHITECTURE.md` together. The scorer turns a `doppelganger` finding into `swap` unless remove wins. A `phantom` finding is `remove` even under `REMOVE_SCORE`, and it wins over `swap`. Do not special-case either in the CLI.
 
 ## Oracle
 
