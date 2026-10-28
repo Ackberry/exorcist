@@ -71,6 +71,13 @@ export interface OracleJudgment {
   /** Plain English: what the flagged code does. */
   summary: string;
   explanation: string;
+  /**
+   * Set only for a doppelganger call. True when the description, README, or code
+   * claims the popular package's identity under a different name.
+   */
+  impersonating?: boolean;
+  /** The popular package that question named. */
+  impersonationOf?: string | null;
 }
 
 export interface OracleStatus {

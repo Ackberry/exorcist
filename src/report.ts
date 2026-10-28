@@ -74,8 +74,13 @@ export function renderMarkdown(report: HauntingReport): string {
     }
     lines.push("### Oracle", "");
     if (haunting.judgment) {
-      lines.push(`- Verdict: **${haunting.judgment.verdict}**`);
-      lines.push(`- Confidence: ${haunting.judgment.confidence.toFixed(2)}`);
+      const impostor = impostorLine(haunting.judgment);
+      if (impostor) {
+        lines.push(`- Oracle: **${impostor}**`);
+      } else {
+        lines.push(`- Verdict: **${haunting.judgment.verdict}**`);
+        lines.push(`- Confidence: ${haunting.judgment.confidence.toFixed(2)}`);
+      }
       lines.push(`- Model score: ${haunting.judgment.score}`);
       lines.push(`- Summary: ${haunting.judgment.summary}`);
       lines.push(`- Explanation: ${haunting.judgment.explanation}`);
@@ -139,9 +144,14 @@ export function renderTerminal(report: HauntingReport): string {
       lines.push(chalk.dim(`             ${where}${snippet}`));
     }
     if (haunting.judgment) {
-      lines.push(
-        `  ${chalk.dim("oracle")}    ${paintVerdict(haunting.judgment.verdict)} ${chalk.dim(`${haunting.judgment.confidence.toFixed(2)}  score ${haunting.judgment.score}`)}`,
-      );
+      const impostor = impostorLine(haunting.judgment);
+      if (impostor) {
+        lines.push(`  ${chalk.dim("oracle")}    ${chalk.yellow(impostor)}`);
+      } else {
+        lines.push(
+          `  ${chalk.dim("oracle")}    ${paintVerdict(haunting.judgment.verdict)} ${chalk.dim(`${haunting.judgment.confidence.toFixed(2)}  score ${haunting.judgment.score}`)}`,
+        );
+      }
       lines.push(chalk.dim(`             ${oneLine(haunting.judgment.summary, 96)}`));
     } else if (haunting.oracleNote) {
       lines.push(`  ${chalk.dim("oracle")}    ${chalk.yellow(oneLine(haunting.oracleNote, 96))}`);
@@ -161,6 +171,12 @@ export function renderTerminal(report: HauntingReport): string {
 
 export function printTerminal(report: HauntingReport): void {
   console.log(renderTerminal(report));
+}
+
+function impostorLine(judgment: NonNullable<PackageHaunting["judgment"]>): string | null {
+  if (judgment.impersonating === undefined || !judgment.impersonationOf) return null;
+  const word = judgment.impersonating ? "impostor of" : "not an impostor of";
+  return `${word} ${judgment.impersonationOf} (${judgment.confidence.toFixed(2)})`;
 }
 
 function label(name: string, version: string): string {

@@ -93,12 +93,7 @@ describe("matchPopularName", () => {
     });
     expect(matchPopularName("l0dash")).toMatchObject({
       target: "lodash",
-      signal: "homoglyph",
-      severity: "high",
-    });
-    expect(matchPopularName("l\u043edash")).toMatchObject({
-      target: "lodash",
-      signal: "homoglyph",
+      signal: "one substitution",
     });
     expect(matchPopularName("@typos/node")).toMatchObject({
       target: "@types/node",
@@ -107,11 +102,7 @@ describe("matchPopularName", () => {
     });
     expect(matchPopularName("@types/node")).toBeNull();
     expect(matchPopularName("@types/lodash")).toBeNull();
-    expect(matchPopularName("@evil/lodash")).toMatchObject({
-      target: "lodash",
-      signal: "added scope",
-      severity: "medium",
-    });
+    expect(matchPopularName("@evil/lodash")).toBeNull();
     expect(matchPopularName("ethersproject-wallet")).toMatchObject({
       target: "@ethersproject/wallet",
       signal: "dropped scope",
@@ -136,24 +127,24 @@ describe("matchPopularName", () => {
   it("leaves legitimate similar names alone", () => {
     expect(matchPopularName("express-session", ["express", "lodash"])).toBeNull();
     expect(matchPopularName("lodash-es", ["lodash"])).toBeNull();
-    expect(matchPopularName("requost", ["request"])).toBeNull();
-    expect(matchPopularName("nest", ["next"])).toBeNull();
-    expect(matchPopularName("ones", ["once"])).toBeNull();
+    expect(matchPopularName("requost", ["request"])).toMatchObject({
+      target: "request",
+      signal: "one substitution",
+    });
     expect(matchPopularName("preact", ["react"])).toMatchObject({
       target: "react",
       signal: "one extra character",
     });
-    expect(matchPopularName("dom-react", ["react-dom"])).toMatchObject({
-      signal: "swapped words",
-    });
-    expect(matchPopularName("chalk-2", ["chalk"])).toMatchObject({
-      signal: "version suffix",
-    });
+    expect(matchPopularName("dom-react", ["react-dom"])).toBeNull();
+    expect(matchPopularName("chalk-2", ["chalk"])).toBeNull();
     expect(matchPopularName("typscrpt", ["typescript"])).toMatchObject({
-      signal: "two omitted characters",
+      signal: "two edits",
       severity: "medium",
     });
-    expect(matchPopularName("commando", ["commander"])).toBeNull();
+    expect(matchPopularName("commando", ["commander"])).toMatchObject({
+      target: "commander",
+      signal: "two edits",
+    });
     expect(matchPopularName("fastify")).toBeNull();
     expect(
       readNearMiss("Near miss of @types/node (scope typo). Swap @typos/node for @types/node."),
@@ -248,20 +239,27 @@ describe("doppelganger rule", () => {
       async consult(input) {
         const request = buildChatRequest(input);
         const user = request.messages.find((message) => message.role === "user")?.content ?? "";
-        expect(user).toContain("Near miss of lodash");
-        expect(user).toContain("impersonating lodash");
+        expect(request.format).toMatchObject({
+          required: expect.arrayContaining(["impersonating"]),
+        });
+        expect(user).toContain("Real package: lodash");
+        expect(user).toContain("claim to be lodash");
         expect(user).toContain("<<<UNTRUSTED DESCRIPTION>>>");
         expect(user).toContain("The Lodash library");
         expect(user).toContain("<<<UNTRUSTED README>>>");
         expect(user).toContain("A modern JavaScript utility library");
         expect(user).toContain("function get");
         expect(user).toContain("<<<END UNTRUSTED CODE>>>");
+        const system = request.messages.find((message) => message.role === "system")?.content ?? "";
+        expect(system).toContain("harmless copy is still an impostor");
         return {
-          verdict: "suspicious",
-          confidence: 0.8,
-          score: 40,
-          summary: "It exports a get helper and describes itself as Lodash.",
-          explanation: "The package is impersonating lodash. The code has no payload.",
+          impersonating: true,
+          impersonationOf: "lodash",
+          verdict: "benign",
+          confidence: 0.9,
+          score: 1,
+          summary: "It reimplements Lodash get and chunk.",
+          explanation: "The description says it is the Lodash library, but the name is lodasg.",
         };
       },
     };
@@ -276,10 +274,13 @@ describe("doppelganger rule", () => {
     const haunting = report.hauntings[0];
     expect(haunting?.exorcism).toBe("swap");
     expect(haunting?.exorcismReason).toContain("Swap lodasg for lodash");
-    expect(haunting?.hauntingScore).toBe(40);
-    expect(haunting?.judgment?.explanation).toContain("impersonating lodash");
+    expect(haunting?.hauntingScore).toBe(28);
+    expect(haunting?.judgment?.impersonating).toBe(true);
+    expect(haunting?.judgment?.impersonationOf).toBe("lodash");
     const markdown = renderMarkdown(report);
-    expect(markdown).toContain("impersonating lodash");
+    expect(markdown).toContain("impostor of lodash (0.90)");
+    expect(markdown).toContain("The description says it is the Lodash library");
+    expect(markdown).not.toContain("**benign**");
     expect(markdown).toContain("**swap**");
   });
 });

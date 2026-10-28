@@ -48,7 +48,7 @@ What you should see on `demo/victim`:
 | `preact`        | imported, and the exact popular name is not a typosquat of `react` | quiet (score 0)       |
 | `lucky-charm`   | imported by `src/app.js`, and no risky API                         | quiet (score 0)        |
 
-Those scores are the rule floors. When Gemma is running it can raise a score. It cannot lower one. `--no-oracle` prints the floors. `lodasg` stays `swap` unless Gemma calls it malicious or raises the score to at least 75. `soul-snatcher` and `hexed-helper` stay `remove` because they are unused.
+Those scores are the rule floors. When Gemma is running it can raise a score. It cannot lower one. `--no-oracle` prints the floors. On a lookalike, the report's oracle line is whether the package is an impostor of the real name, not only whether the code is harmful. `lodasg` stays `swap` unless Gemma calls the code malicious or raises the score to at least 75. `soul-snatcher` and `hexed-helper` stay `remove` because they are unused.
 
 Rules only, without Gemma:
 
@@ -104,7 +104,7 @@ If you skip `npm install` in `demo/victim`, the committed lockfile still points 
 
 1. Read `package-lock.json` and list installed packages (name, version, path, `package.json`).
 2. Run every rule. **Poltergeist** flags risky install scripts and APIs. **Doppelganger** flags a name that imitates a popular package. **Phantom** flags a direct dependency the project never imports or names in a script. Revenant returns no findings.
-3. If Ollama is up and the model is pulled, send each haunted package to Gemma: the rule findings, the flagged code, and the stated purpose (name, description, and a README excerpt when a README is present). For a doppelganger hit, Gemma is also asked whether that text impersonates the real package. Gemma returns a score and a verdict. Package text is treated as data, not as instructions. A dropped connection or an HTTP 500 is retried once.
+3. If Ollama is up and the model is pulled, send each haunted package to Gemma: the flagged code, and the stated purpose (name, description, and a README excerpt when a README is present). Package text is treated as data, not as instructions. A doppelganger hit uses a separate question: does this package claim the real package's identity under a different name? Gemma returns `impersonating` true or false. A harmless copy that says it is lodash is an impostor. The report shows that, for example `impostor of lodash (0.90)`, and the score still cannot fall below the rule total. A dropped connection or an HTTP 500 is retried once.
 4. The reported score is Gemma's score, or the rule total when that total is higher. With `--no-oracle`, or when the call fails, the score is the rule total only. Pick an exorcism: `pin`, `remove`, or `swap`.
 5. Print the terminal report and write `haunting-report.md`.
 
