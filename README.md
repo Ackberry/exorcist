@@ -1,6 +1,6 @@
 # Exorcist
 
-Exorcist scans an npm project's **installed** dependencies for malicious or risky packages. Cheap rules flag suspects. Only those suspects are shown to **Gemma**, running locally through **Ollama**, which reads the flagged code and returns a verdict: benign, suspicious, or malicious.
+Exorcist scans an npm project's **installed** dependencies for malicious or risky packages. Cheap rules flag suspects. Only those suspects are shown to **Gemma**, running locally through **Ollama**, which reads the flagged code against the package's stated purpose and returns a risk score plus a verdict: benign, suspicious, or malicious. The score cannot go below the total from the rules.
 
 It is a small scanner for the DEV Hacktoberfest Open-Source AI Challenge, "Ghost in the Machine" (deadline Sat Oct 31, 2026). Poltergeist and phantom are the rules that flag packages today.
 
@@ -47,6 +47,8 @@ What you should see on `demo/victim`:
 | `lodasg`        | imports `child_process` and never calls it, and the app never imports `lodasg` | remove (score 44)      |
 | `lucky-charm`   | imported by `src/app.js`, and no risky API                                      | quiet (score 0)        |
 
+Those scores are the rule floors. When Gemma is running it can raise a score. It cannot lower one. `--no-oracle` prints the floors. On this demo the exorcism stays `remove` for the three flagged packages either way, because each one is unused.
+
 `lodasg` is a typosquat of `lodash` (the final `h` changed to `g`). The doppelganger rule is still a stub, so the name is **not** why it is flagged. See [docs/STATUS.md](docs/STATUS.md).
 
 The command writes `haunting-report.md` in the current directory (gitignored) and prints the same findings in the terminal.
@@ -74,7 +76,7 @@ Environment overrides, used when the matching flag is absent:
 | `OLLAMA_MODEL` | Same as `--model`.                                                            |
 | `OLLAMA_HOST`  | Same as `--endpoint`. Ollama's own variable. `127.0.0.1:11434` or a full URL. |
 
-Exit code `0` means the scan finished, even if packages are haunted. Exit code `1` means the scan could not run (bad arguments, missing directory, unreadable or unsupported lockfile).
+Exit code `0` means the scan finished, even if packages are haunted. Exit code `1` means the scan could not run (bad arguments, missing directory, unreadable or unsupported lockfile). The process sets that code and waits until open handles finish closing.
 
 Inside this repository, run `npx tsx src/cli.ts` or `node dist/cli.js`. `package.json` has a `bin` entry named `exorcist`, so `npx exorcist` works **after this package is installed** (`npm install -g .` from a clone, or as a dependency of another project). Running `npx exorcist` here, before that, asks the npm registry for a different package named `exorcist`.
 
@@ -96,8 +98,8 @@ If you skip `npm install` in `demo/victim`, the committed lockfile still points 
 
 1. Read `package-lock.json` and list installed packages (name, version, path, `package.json`).
 2. Run every rule. **Poltergeist** flags risky install scripts and APIs. **Phantom** flags a direct dependency the project never imports or names in a script. Doppelganger and revenant return no findings.
-3. If Ollama is up and the model is pulled, send each haunted package's snippets to Gemma and validate the JSON verdict.
-4. Score each haunted package from 0 to 100 and pick an exorcism: `pin`, `remove`, or `swap`.
+3. If Ollama is up and the model is pulled, send each haunted package to Gemma: the rule findings, the flagged code, and the stated purpose (name, description, and a README excerpt when a README is present). Gemma returns a score and a verdict. Package text is treated as data, not as instructions. A dropped connection or an HTTP 500 is retried once.
+4. The reported score is Gemma's score, or the rule total when that total is higher. With `--no-oracle`, or when the call fails, the score is the rule total only. Pick an exorcism: `pin`, `remove`, or `swap`.
 5. Print the terminal report and write `haunting-report.md`.
 
 Quiet packages stay out of the oracle. Details, types, and the score formula are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). What is stubbed, and what to build next, is in [docs/STATUS.md](docs/STATUS.md).
@@ -106,7 +108,7 @@ Quiet packages stay out of the oracle. Details, types, and the score formula are
 
 | Script                       | What it does                                    |
 | ---------------------------- | ----------------------------------------------- |
-| `npm run build`              | Compile `src/` to `dist/` with `tsc`.           |
+| `npm run build`              | Compile `src/` to `dist/` with `tsc`, then mark `dist/cli.js` executable. Works on Windows, where the `chmod` command is missing. |
 | `npm test`                   | Unit tests (`vitest`). They do not need Ollama. |
 | `npm run dev -- demo/victim` | Same as `tsx src/cli.ts demo/victim`.           |
 | `npm run lint`               | Biome, then `tsc --noEmit`.                     |

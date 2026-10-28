@@ -37,6 +37,7 @@ function judgment(overrides: Partial<OracleJudgment> = {}): OracleJudgment {
   return {
     verdict: "suspicious",
     confidence: 1,
+    score: 0,
     summary: "It reaches for a shell.",
     explanation: "child_process is unused.",
     ...overrides,
@@ -44,14 +45,29 @@ function judgment(overrides: Partial<OracleJudgment> = {}): OracleJudgment {
 }
 
 describe("scorer", () => {
-  it("sums rule weights and caps them at 100 before the oracle nudge", () => {
+  it("sums rule weights into a floor the model cannot lower", () => {
     const high = finding();
     expect(hauntingScore([high], null)).toBe(SEVERITY_WEIGHTS.high);
     const criticals = Array.from({ length: 4 }, () =>
       finding({ severity: "critical", title: "runs a postinstall script" }),
     );
     expect(hauntingScore(criticals, null)).toBe(100);
-    expect(hauntingScore(criticals, judgment({ verdict: "benign", confidence: 1 }))).toBe(82);
+    expect(hauntingScore(criticals, judgment({ verdict: "benign", confidence: 1, score: 0 }))).toBe(
+      100,
+    );
+    expect(hauntingScore([high], judgment({ verdict: "benign", score: 5 }))).toBe(
+      SEVERITY_WEIGHTS.high,
+    );
+  });
+
+  it("uses the model score when it is above the rule floor", () => {
+    const high = finding();
+    const judged = judgment({ verdict: "malicious", confidence: 0.9, score: 88 });
+    expect(hauntingScore([high], judged)).toBe(88);
+    expect(judgePackage(pkg, [high], judged, null)).toMatchObject({
+      hauntingScore: 88,
+      exorcism: "remove",
+    });
   });
 
   it("pins, swaps, or removes from the score and the verdict", () => {

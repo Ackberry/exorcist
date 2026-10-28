@@ -21,22 +21,23 @@ export const REMOVE_SCORE = 75;
 /** A malicious verdict at or above this confidence also removes, even if the rule score is lower. */
 export const MALICIOUS_CONFIDENCE = 0.5;
 
-export const ORACLE_NUDGE: Record<OracleJudgment["verdict"], number> = {
-  malicious: 20,
-  suspicious: 8,
-  benign: -18,
-};
+/**
+ * Sum of rule weights, capped at 100. This is the haunting score when Gemma
+ * is not consulted, and the lowest haunting score a judgment can produce.
+ */
+export function ruleFloor(findings: readonly Finding[]): number {
+  const total = findings.reduce((sum, finding) => sum + SEVERITY_WEIGHTS[finding.severity], 0);
+  return Math.min(100, total);
+}
 
 export function hauntingScore(
   findings: readonly Finding[],
   judgment: OracleJudgment | null,
 ): number {
-  const fromRules = findings.reduce((sum, finding) => sum + SEVERITY_WEIGHTS[finding.severity], 0);
-  let score = Math.min(100, fromRules);
-  if (judgment) {
-    score += ORACLE_NUDGE[judgment.verdict] * judgment.confidence;
-  }
-  return Math.round(Math.min(100, Math.max(0, score)));
+  const floor = ruleFloor(findings);
+  if (!judgment) return floor;
+  // The model may raise the score. It cannot talk it down past the rule floor.
+  return Math.round(Math.min(100, Math.max(floor, judgment.score)));
 }
 
 export function judgePackage(

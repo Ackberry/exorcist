@@ -39,14 +39,16 @@ The four kinds already exist on `GhostKind`. You should not need a new kind for 
 
 ## Scoring
 
-Weights and thresholds live in `src/scorer.ts` (`SEVERITY_WEIGHTS`, `REMOVE_SCORE`, `MALICIOUS_CONFIDENCE`, `ORACLE_NUDGE`). Change them there and in `docs/ARCHITECTURE.md` together. The scorer turns a `doppelganger` finding into `swap` unless remove wins. A `phantom` finding is `remove` even under `REMOVE_SCORE`, and it wins over `swap`. Do not special-case either in the CLI.
+Weights and thresholds live in `src/scorer.ts` (`SEVERITY_WEIGHTS`, `REMOVE_SCORE`, `MALICIOUS_CONFIDENCE`). `ruleFloor` is the capped sum of those weights. With no judgment, `hauntingScore` is the floor, which is what `--no-oracle` uses. A judgment's `score` replaces that number only when it is higher. Change the weights there and in `docs/ARCHITECTURE.md` together. The scorer turns a `doppelganger` finding into `swap` unless remove wins. A `phantom` finding is `remove` even under `REMOVE_SCORE`, and it wins over `swap`. Do not special-case either in the CLI.
 
 ## Oracle
 
 - The model that judges suspects is local Gemma through Ollama. Default `gemma3:4b`. Do not route this through a hosted chat API.
-- Parse model output with `parseJudgment`. Do not trust the string without that check.
-- Keep truncation in `buildSuspectExcerpt`. Raising `SUSPECT_CODE_CHAR_BUDGET` is a product change; note it in `docs/ARCHITECTURE.md`.
-- Tests pass a fake `OracleClient` into `haunt`. Do not call the real network from a unit test except the existing closed-port `probe` test.
+- Parse model output with `parseJudgment`. Do not trust the string without that check. A judgment needs `score` as well as the verdict.
+- The chat prompt includes the rule findings, the flagged code, and the stated purpose (name, description, README excerpt). Package text is untrusted data in the user message. Do not move it into the system prompt.
+- A transport error or HTTP 5xx on `/api/chat` retries once. Do not add another retry loop.
+- Keep truncation in `buildSuspectExcerpt`. Raising `SUSPECT_CODE_CHAR_BUDGET`, `DESCRIPTION_EXCERPT_CHARS`, or `README_EXCERPT_CHARS` is a product change; note it in `docs/ARCHITECTURE.md`.
+- Tests pass a fake `OracleClient` into `haunt`. Tests of `consult` stub `fetch`. Do not call the real network from a unit test except the existing closed-port `probe` test.
 
 ## Testing
 

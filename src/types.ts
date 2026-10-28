@@ -63,6 +63,11 @@ export interface OracleJudgment {
   verdict: Verdict;
   /** From 0 to 1. */
   confidence: number;
+  /**
+   * Gemma's risk score, from 0 to 100. The reported haunting score is at least
+   * the rule floor; this field is the number the model returned.
+   */
+  score: number;
   /** Plain English: what the flagged code does. */
   summary: string;
   explanation: string;
