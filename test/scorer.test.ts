@@ -97,6 +97,46 @@ describe("scorer", () => {
     expect(swapped.exorcismReason).toContain("Swap lodasg for lodash");
     expect(judgePackage(pkg, [doppel, ...severe], null, null).exorcism).toBe("remove");
 
+    const liveImpostor = judgePackage(
+      pkg,
+      [doppel],
+      judgment({
+        impersonating: true,
+        impersonationOf: "lodash",
+        verdict: "malicious",
+        confidence: 0.95,
+        score: 90,
+        summary: "lodash",
+        explanation: "lodash",
+      }),
+      null,
+    );
+    expect(liveImpostor.hauntingScore).toBe(SEVERITY_WEIGHTS.high);
+    expect(liveImpostor.exorcism).toBe("swap");
+    expect(liveImpostor.exorcismReason).toContain("Swap lodasg for lodash");
+    expect(liveImpostor.exorcismReason).not.toMatch(/malicious/i);
+    expect(liveImpostor.judgment?.summary).toBe(
+      "lodasg claims to be lodash under a different name.",
+    );
+    expect(liveImpostor.judgment?.explanation).toBe(liveImpostor.judgment?.summary);
+
+    const harmfulImpostor = judgePackage(
+      pkg,
+      [doppel, finding()],
+      judgment({
+        impersonating: true,
+        impersonationOf: "lodash",
+        verdict: "malicious",
+        confidence: 0.95,
+        score: 90,
+        summary: "The install script reads the environment.",
+        explanation: "It impersonates lodash and the code steals environment variables.",
+      }),
+      null,
+    );
+    expect(harmfulImpostor.exorcism).toBe("remove");
+    expect(harmfulImpostor.exorcismReason).toMatch(/malicious/i);
+
     const phantom = finding({
       rule: "phantom",
       severity: "medium",

@@ -37,6 +37,9 @@ export function hauntingScore(
 ): number {
   const floor = ruleFloor(findings);
   if (!judgment) return floor;
+  // Impersonation alone stays on the rule floor. A model score of 90 must not
+  // turn a typosquat into a remove. Other rules can still raise the score.
+  if (impersonationOnly(findings, judgment)) return floor;
   // The model may raise the score. It cannot talk it down past the rule floor.
   return Math.round(Math.min(100, Math.max(floor, judgment.score)));
 }
@@ -47,8 +50,9 @@ export function judgePackage(
   judgment: OracleJudgment | null,
   oracleNote: string | null,
 ): PackageHaunting {
-  const score = hauntingScore(findings, judgment);
-  const decision = exorcismFor(pkg, findings, score, judgment);
+  const usable = withImpostorReason(pkg, findings, judgment);
+  const score = hauntingScore(findings, usable);
+  const decision = exorcismFor(pkg, findings, score, usable);
   return {
     name: pkg.name,
     version: pkg.version,
@@ -56,7 +60,7 @@ export function judgePackage(
     direct: pkg.direct,
     dev: pkg.dev,
     findings,
-    judgment,
+    judgment: usable,
     oracleNote,
     hauntingScore: score,
     exorcism: decision.exorcism,
@@ -71,13 +75,20 @@ function exorcismFor(
   judgment: OracleJudgment | null,
 ): { exorcism: Exorcism; exorcismReason: string } {
   const top = strongest(findings);
-  if (judgment && judgment.verdict === "malicious" && judgment.confidence >= MALICIOUS_CONFIDENCE) {
+  // A name impersonation is a swap. Malicious/remove applies when another rule
+  // already found harmful behavior, such as a poltergeist signal.
+  if (
+    !impersonationOnly(findings, judgment) &&
+    judgment &&
+    judgment.verdict === "malicious" &&
+    judgment.confidence >= MALICIOUS_CONFIDENCE
+  ) {
     return {
       exorcism: "remove",
       exorcismReason: `The oracle called it malicious (${judgment.confidence.toFixed(2)}). Strongest signal: ${top.title}.`,
     };
   }
-  if (score >= REMOVE_SCORE) {
+  if (!impersonationOnly(findings, judgment) && score >= REMOVE_SCORE) {
     return {
       exorcism: "remove",
       exorcismReason: `Haunting score ${score}/100 is at least ${REMOVE_SCORE}. Strongest signal: ${top.title}.`,
@@ -108,6 +119,44 @@ function exorcismFor(
   return {
     exorcism: "pin",
     exorcismReason: `Haunting score ${score}/100. Pin ${pkg.name}@${pkg.version} and read the flagged code before upgrading. Strongest signal: ${top.title}.`,
+  };
+}
+
+function impersonationOnly(findings: readonly Finding[], judgment: OracleJudgment | null): boolean {
+  return (
+    judgment?.impersonating === true && findings.every((finding) => finding.rule === "doppelganger")
+  );
+}
+
+/** A reason that is empty or only the target name is not a sentence. */
+function usableReason(text: string, realName: string, installedName: string): boolean {
+  const bare = text
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?]+$/g, "")
+    .trim();
+  if (bare.length < 12) return false;
+  const names = new Set([realName.trim().toLowerCase(), installedName.trim().toLowerCase()]);
+  if (names.has(bare)) return false;
+  if (/^(not an )?impostor of \S+$/.test(bare)) return false;
+  return true;
+}
+
+function withImpostorReason(
+  pkg: InstalledPackage,
+  findings: readonly Finding[],
+  judgment: OracleJudgment | null,
+): OracleJudgment | null {
+  if (judgment?.impersonating !== true) return judgment;
+  const realName = judgment.impersonationOf ?? nearMissTarget(findings);
+  if (!realName) return judgment;
+  const fallback = `${pkg.name} claims to be ${realName} under a different name.`;
+  return {
+    ...judgment,
+    summary: usableReason(judgment.summary, realName, pkg.name) ? judgment.summary : fallback,
+    explanation: usableReason(judgment.explanation, realName, pkg.name)
+      ? judgment.explanation
+      : fallback,
   };
 }
 

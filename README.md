@@ -48,7 +48,7 @@ What you should see on `demo/victim`:
 | `preact`        | imported, and the exact popular name is not a typosquat of `react` | quiet (score 0)       |
 | `lucky-charm`   | imported by `src/app.js`, and no risky API                         | quiet (score 0)        |
 
-Those scores are the rule floors. When Gemma is running it can raise a score. It cannot lower one. `--no-oracle` prints the floors. On a lookalike, the report's oracle line is whether the package is an impostor of the real name, not only whether the code is harmful. `lodasg` stays `swap` unless Gemma calls the code malicious or raises the score to at least 75. `soul-snatcher` and `hexed-helper` stay `remove` because they are unused.
+Those scores are the rule floors. When Gemma is running it can raise a score. It cannot lower one. `--no-oracle` prints the floors. On a lookalike, the report's oracle line is whether the package is an impostor of the real name, not only whether the code is harmful. `lodasg` stays `swap` at its rule score when the only finding is the typosquat, even if Gemma calls the impostor malicious. A harmful rule on that same package can still remove it. `soul-snatcher` and `hexed-helper` stay `remove` because they are unused.
 
 Rules only, without Gemma:
 
