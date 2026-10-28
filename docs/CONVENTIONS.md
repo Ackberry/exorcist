@@ -59,6 +59,8 @@ npm test
 
 `vitest` runs `test/**/*.test.ts`. A new behavior needs a test that fails if the behavior is removed. Prefer a temp directory over a snapshot of chalk output. Markdown is asserted with `toContain` on stable phrases, not the whole file.
 
+CI (`.github/workflows/ci.yml`) runs `npm run lint`, `npm test`, `npm run build`, and a rules-only `demo/victim` scan on ubuntu and windows, Node 22.13 and 24. Run `npm run lint` and `npm test` before you push, and do not add a test that needs Ollama or a network call: the runner has neither.
+
 The demo scan, with or without Ollama:
 
 ```bash

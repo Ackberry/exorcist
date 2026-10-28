@@ -14,6 +14,7 @@ Updated 2026-10-28. The Day 1 skeleton is in place, phantom and doppelganger are
 - Scorer (0–100) and exorcism (`pin`, `remove`, `swap`). With no judgment, the score is `ruleFloor` (the severity total, capped at 100). Gemma's score is used only when it is higher than that floor. `--no-oracle` stays on the floor. A phantom finding is `remove` even when the score is under 75, unless a malicious verdict or the score threshold already removed it. That beats `swap`. Terminal report and `haunting-report.md`.
 - `npm run build` marks `dist/cli.js` executable with Node's `chmodSync` (`scripts/mark-executable.js`), so the build does not call the shell `chmod` command. The CLI sets `process.exitCode` and does not call `process.exit()`. Exit codes are unchanged: 0 when the scan finished, 1 when it could not run.
 - `demo/victim` with three possessed fixtures and two quiet controls, installed from `file:` paths. `src/app.js` imports `lucky-charm`, `lodasg`, and `preact`. `npm test` covers the resolver, poltergeist, phantom, doppelganger (including a mocked Ollama swap), the oracle's parser, request, model score, and one Ollama retry, the scorer's rule floor, the revenant stub, the pipeline with a fake client, the demo, and that Sentry tracing does nothing when `SENTRY_DSN` is unset.
+- GitHub Actions CI (`.github/workflows/ci.yml`) on every push to `main` and every pull request. One job per cell of ubuntu-latest and windows-latest times Node 22.13 and 24: `npm ci`, `npm run lint`, `npm test`, `npm run build`, then `node dist/cli.js demo/victim --no-oracle`. Windows is in the matrix because `scripts/mark-executable.js` replaces the shell `chmod`. The runner has no Ollama and no `SENTRY_DSN`, so CI exercises the rules-only path.
 
 ## Stubbed
 
@@ -30,7 +31,7 @@ Updated 2026-10-28. The Day 1 skeleton is in place, phantom and doppelganger are
 - Poltergeist still does not read the target project's own source. Only installed packages.
 - A non-zero exit code when the score is high. A finished scan exits 0. A GitHub Action will need a threshold flag.
 - `exorcist check <pkg>` for one package directory or tarball, without a lockfile.
-- Live Gemma in CI. The suite never pulls a model. Day 1 was checked with Ollama not installed: a closed-port `probe` and a full `demo/victim` scan both produce the rules-only report. A local Ollama 0.40.11 check confirmed `gemma3:4b` rejects tools and accepts the JSON schema `format`. A real `gemma3:4b` transcript is not recorded in this repo.
+- Live Gemma in CI. CI runs the suite and a rules-only scan; it never installs Ollama or pulls a model. Day 1 was checked with Ollama not installed: a closed-port `probe` and a full `demo/victim` scan both produce the rules-only report. A local Ollama 0.40.11 check confirmed `gemma3:4b` rejects tools and accepts the JSON schema `format`. A real `gemma3:4b` transcript is not recorded in this repo.
 - Retry of a schema `400` is implemented; there is no recorded fixture of a real Ollama 400 body. A 5xx or dropped chat connection retries once; the unit test mocks the 500 body and does not record a live Ollama transcript.
 
 ## Limits worth knowing
