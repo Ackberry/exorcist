@@ -10,7 +10,7 @@ Exorcist is a small strict TypeScript program. Deep is learning the language and
 - `strict` and `noUncheckedIndexedAccess` are on. Handle a missing index instead of assuming it.
 - `tsc` emits `src/` to `dist/` via `tsconfig.build.json`. Tests are typechecked by the root `tsconfig.json` and are not emitted.
 - The bin is `src/cli.ts`. Keep the shebang on line 1.
-- Runtime dependencies are `chalk`, `@mastra/core`, `zod`, and `ollama-ai-provider-v2`. Do not add the `mastra` CLI, a storage adapter, or a cloud LLM SDK.
+- Runtime dependencies are `chalk`, `@mastra/core`, `zod`, `ollama-ai-provider-v2`, `@mastra/observability`, and `@mastra/sentry`. Do not add the `mastra` CLI, a storage adapter, or a cloud LLM SDK. Sentry loads only when `SENTRY_DSN` is set.
 
 ## Style
 

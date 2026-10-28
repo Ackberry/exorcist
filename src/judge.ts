@@ -11,6 +11,7 @@ import {
   lookalikeOf,
   parseJudgment,
 } from "./oracle.js";
+import { judgeTraceContext } from "./tracing.js";
 import type { OracleJudgment } from "./types.js";
 
 /**
@@ -41,6 +42,7 @@ export async function generateJudgment(input: ConsultInput): Promise<OracleJudgm
   });
 
   let text: string;
+  const tracingContext = judgeTraceContext();
   try {
     const response = await agent.generate(user, {
       structuredOutput: {
@@ -53,6 +55,7 @@ export async function generateJudgment(input: ConsultInput): Promise<OracleJudgm
       providerOptions: {
         ollama: { options: { temperature: 0 } },
       },
+      ...(tracingContext ? { tracingContext } : {}),
     });
     const raw = typeof response.text === "string" ? response.text.trim() : "";
     text = raw.length > 0 ? response.text : JSON.stringify(response.object ?? "");
