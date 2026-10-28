@@ -41,7 +41,9 @@ describe("credential paths", () => {
     expect(isSensitiveRealPath("/home/me/.npmrc", home, markers)).toBe(true);
     expect(isSensitiveRealPath("/etc/hosts", home, markers)).toBe(true);
     expect(isSensitiveRealPath(home, home, markers)).toBe(true);
-    expect(isSensitiveRealPath("/", home, markers)).toBe(true);
+    // isSensitiveRealPath compares against resolve("/"), and its callers pass a
+    // realpathSync result. On Windows the literal "/" is not that root.
+    expect(isSensitiveRealPath(resolve("/"), home, markers)).toBe(true);
     expect(isSensitiveRealPath("/home/me/.ssh-backup/id_rsa", home, markers)).toBe(false);
     expect(isSensitiveRealPath("/home/me/projects/app/node_modules/left-pad", home, markers)).toBe(
       false,
