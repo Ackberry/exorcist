@@ -243,6 +243,7 @@ function ollamaMessage(judgment: OracleJudgment, status = 200): Response {
   return new Response(
     JSON.stringify({
       model: "gemma3:4b",
+      created_at: "2026-10-28T00:00:00.000Z",
       message: { role: "assistant", content: JSON.stringify(judgment) },
       done: true,
     }),
@@ -349,10 +350,15 @@ describe("consult over HTTP", () => {
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
       messages?: { role: string; content: string }[];
+      tools?: unknown;
+      format?: unknown;
     };
     const user = body.messages?.find((message) => message.role === "user")?.content ?? "";
     expect(user).toContain("A tiny color helper for hex and rgb strings.");
     expect(user).toContain("process.env.TOKEN");
+    expect(user).toContain("<<<UNTRUSTED CODE>>>");
+    expect(body.tools).toBeUndefined();
+    expect(body.format).toMatchObject(JUDGMENT_SCHEMA);
   });
 
   it("retries once after an Ollama 500 and then uses the model score", async () => {
@@ -405,7 +411,7 @@ describe("consult over HTTP", () => {
     expect(judgment.score).toBe(44);
     const first = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { format?: unknown };
     const second = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as { format?: unknown };
-    expect(first.format).toEqual(JUDGMENT_SCHEMA);
+    expect(first.format).toMatchObject(JUDGMENT_SCHEMA);
     expect(second.format).toBe("json");
   });
 });

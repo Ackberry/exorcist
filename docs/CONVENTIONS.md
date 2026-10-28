@@ -4,13 +4,13 @@ Exorcist is a small strict TypeScript program. Deep is learning the language and
 
 ## Language and layout
 
-- Node.js 20 or newer. Do not use APIs added after Node 20.
+- Node.js 22.13 or newer. `@mastra/core` requires it. Do not use APIs added after Node 22.13.
 - ESM only. `"type": "module"`. In `src/` and `test/`, relative imports use the `.js` extension even though the source is `.ts` (`moduleResolution: Node16`).
 - `verbatimModuleSyntax` is on. Use `import type` (or an inline `type` import) for types.
 - `strict` and `noUncheckedIndexedAccess` are on. Handle a missing index instead of assuming it.
 - `tsc` emits `src/` to `dist/` via `tsconfig.build.json`. Tests are typechecked by the root `tsconfig.json` and are not emitted.
 - The bin is `src/cli.ts`. Keep the shebang on line 1.
-- Runtime dependency is `chalk`. Add another one only when the standard library cannot do the job in a readable way. Do not add a cloud LLM SDK.
+- Runtime dependencies are `chalk`, `@mastra/core`, `zod`, and `ollama-ai-provider-v2`. Do not add the `mastra` CLI, a storage adapter, or a cloud LLM SDK.
 
 ## Style
 
@@ -44,7 +44,8 @@ Weights and thresholds live in `src/scorer.ts` (`SEVERITY_WEIGHTS`, `REMOVE_SCOR
 ## Oracle
 
 - The model that judges suspects is local Gemma through Ollama. Default `gemma3:4b`. Do not route this through a hosted chat API.
-- Parse model output with `parseJudgment`. Do not trust the string without that check. A judgment needs `score` as well as the verdict.
+- The scan is the `haunt` Mastra workflow. `consult` calls the Gemma agent in `src/judge.ts`. Do not give that agent tools: `gemma3:4b` through Ollama returns HTTP 400 `does not support tools`.
+- Parse model output with `parseJudgment`. Do not trust the string without that check. A judgment needs `score` as well as the verdict. The agent still sends Ollama's `format` JSON schema.
 - The chat prompt includes the rule findings, the flagged code, and the stated purpose (name, description, README excerpt). Package text is untrusted data in the user message. Do not move it into the system prompt.
 - A transport error or HTTP 5xx on `/api/chat` retries once. Do not add another retry loop.
 - Keep truncation in `buildSuspectExcerpt`. Raising `SUSPECT_CODE_CHAR_BUDGET`, `DESCRIPTION_EXCERPT_CHARS`, or `README_EXCERPT_CHARS` is a product change; note it in `docs/ARCHITECTURE.md`.

@@ -195,34 +195,9 @@ export async function probe(target: OracleTarget): Promise<OracleProbeResult> {
 }
 
 export async function consult(input: ConsultInput): Promise<OracleJudgment> {
-  const endpoint = normalizeEndpoint(input.target.endpoint);
-  const resembles = lookalikeOf(input.findings);
-  const schema = resembles ? LOOKALIKE_SCHEMA : JUDGMENT_SCHEMA;
-  let attempt = await postChatAllowingOneRetry(endpoint, buildChatRequest(input, schema));
-  if (attempt.response.status === 400) {
-    await discardBody(attempt.response);
-    attempt = await postChatAllowingOneRetry(endpoint, buildChatRequest(input, "json"));
-  }
-  const response = attempt.response;
-  if (!response.ok) {
-    const text = (await response.text()).replaceAll(/\s+/g, " ").slice(0, 300);
-    const retryNote = attempt.retried ? " after one retry" : "";
-    throw new OracleError(
-      `Ollama returned ${response.status} from ${endpoint}/api/chat${retryNote}: ${text}`,
-    );
-  }
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    throw new OracleError("Ollama returned a chat response that was not JSON.");
-  }
-  const content = readChatContent(body);
-  if (content === null) {
-    throw new OracleError("Ollama returned a chat response with no message content.");
-  }
-  const judgment = parseJudgment(content, resembles !== null);
-  return resembles ? { ...judgment, impersonationOf: resembles } : judgment;
+  // Dynamic import: the judge imports these prompt helpers, so a static import would cycle.
+  const { generateJudgment } = await import("./judge.js");
+  return generateJudgment(input);
 }
 
 export const ollamaClient: OracleClient = { probe, consult };
@@ -313,58 +288,6 @@ function asConfidence(value: unknown): number | null {
   return scaled;
 }
 
-interface ChatAttempt {
-  response: Response;
-  retried: boolean;
-}
-
-type PostResult = { ok: true; response: Response } | { ok: false; error: unknown };
-
-/**
- * One extra attempt when the chat call throws or Ollama returns 5xx.
- * gemma3:4b on Windows has been seen to answer the second back-to-back call
- * with HTTP 500 "llama-server process has terminated".
- */
-async function postChatAllowingOneRetry(endpoint: string, body: ChatRequest): Promise<ChatAttempt> {
-  const first = await tryPostChat(endpoint, body);
-  if (first.ok && first.response.status < 500) {
-    return { response: first.response, retried: false };
-  }
-  if (first.ok) await discardBody(first.response);
-  const second = await tryPostChat(endpoint, body);
-  if (second.ok) return { response: second.response, retried: true };
-  throw new OracleError(`${errorMessage(second.error)} (retried once)`);
-}
-
-async function tryPostChat(endpoint: string, body: ChatRequest): Promise<PostResult> {
-  try {
-    return { ok: true, response: await postChat(endpoint, body) };
-  } catch (error) {
-    return { ok: false, error };
-  }
-}
-
-async function postChat(endpoint: string, body: ChatRequest): Promise<Response> {
-  try {
-    return await fetch(`${endpoint}/api/chat`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(CONSULT_TIMEOUT_MS),
-    });
-  } catch (error) {
-    throw new OracleError(`Could not reach Ollama at ${endpoint}: ${errorMessage(error)}`);
-  }
-}
-
-async function discardBody(response: Response): Promise<void> {
-  try {
-    await response.body?.cancel();
-  } catch {
-    // The body may already be closed.
-  }
-}
-
 function harmUser(input: ConsultInput): string {
   const purpose = readStatedPurpose(input.pkg);
   const excerpt = buildSuspectExcerpt(input.findings);
@@ -391,7 +314,7 @@ function harmUser(input: ConsultInput): string {
   ].join("\n");
 }
 
-function lookalikeOf(findings: readonly Finding[]): string | null {
+export function lookalikeOf(findings: readonly Finding[]): string | null {
   for (const finding of findings) {
     if (finding.rule !== "doppelganger") continue;
     const target = readNearMiss(finding.detail);
@@ -483,14 +406,6 @@ function readReadmeExcerpt(dir: string | null): string | null {
     if (clipped) return clipped;
   }
   return null;
-}
-
-function readChatContent(body: unknown): string | null {
-  if (typeof body !== "object" || body === null) return null;
-  const message = (body as { message?: unknown }).message;
-  if (typeof message !== "object" || message === null) return null;
-  const content = (message as { content?: unknown }).content;
-  return typeof content === "string" ? content : null;
 }
 
 async function readModelNames(response: Response): Promise<string[] | null> {
