@@ -5,6 +5,7 @@ Exorcist is a small TypeScript CLI. Read these before editing, and treat them as
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — pipeline, modules, data types, scoring, and the oracle
 - [docs/STATUS.md](docs/STATUS.md) — what is done, what is stubbed, what to build next
 - [docs/CONVENTIONS.md](docs/CONVENTIONS.md) — style, tests, commits, and how to add a rule
+- [docs/submission-checklist.md](docs/submission-checklist.md) — Week 4 submission checklist
 - [README.md](README.md) — how to run the demo
 
 ## Required with every change
