@@ -80,6 +80,29 @@ describe("oracle contract", () => {
     expect(user).toContain("poltergeist/high");
     expect(user).toContain("<<<UNTRUSTED CODE>>>");
     expect(user).toContain("<<<END UNTRUSTED CODE>>>");
+    expect(user).toContain("Return JSON only");
+    expect(system).toContain("Impersonation");
+  });
+
+  it("asks whether a near miss is impersonating the popular package", () => {
+    const request = buildChatRequest({
+      target: { endpoint: "http://localhost:11434", model: "gemma3:4b" },
+      pkg,
+      findings: [
+        {
+          ...finding("function get(object, key) { return object[key]; }"),
+          rule: "doppelganger",
+          title: "name imitates lodash",
+          detail: "Near miss of lodash (one substitution). Swap lodasg for lodash.",
+          packageName: "lodasg",
+        },
+      ],
+    });
+    const user = request.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(user).toContain("Lookalike:");
+    expect(user).toContain("impersonating lodash");
+    expect(user).toContain("<<<UNTRUSTED CODE>>>");
+    expect(user).toContain("function get");
   });
 
   it("sends the description and README as untrusted data, not as instructions", () => {

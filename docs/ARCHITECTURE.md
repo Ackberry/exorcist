@@ -45,7 +45,7 @@ Calls to the model are sequential, one per haunted package, so a laptop-sized Ol
 | `src/types.ts`              | Shared types: packages, findings, rules, judgments, the report.                                 |
 | `src/resolver.ts`           | Lockfile v2/v3 to `InstalledPackage[]`.                                                         |
 | `src/rules/poltergeist.ts`  | Install scripts and risky APIs inside installed packages.                                       |
-| `src/rules/doppelganger.ts` | Stub. Exports `POPULAR_PACKAGES` for the next implementation.                                   |
+| `src/rules/doppelganger.ts` | Typosquat and impersonation names against `POPULAR_PACKAGES`.                                  |
 | `src/rules/revenant.ts`     | Stub. Registry lookup is not implemented.                                                       |
 | `src/rules/phantom.ts`      | Direct dependency the project never imports or names in a script.                               |
 | `src/rules/index.ts`        | `rules` array, in the order findings are collected.                                             |
@@ -159,7 +159,36 @@ This is a lexer, not a JavaScript parser. Comments and ordinary strings are not 
 - An import that lives only in a skipped directory, a file over 512 KiB, or past the 300-file cap is invisible, so that dependency is flagged.
 - Symlinked source files are not followed. If the package directory is missing, `bin` names are unknown.
 
-On the demo, `demo/victim/src/app.js` imports `lucky-charm` and does not reference `soul-snatcher`, `hexed-helper`, or `lodasg`. Those three get a phantom finding. `lucky-charm` does not.
+On the demo, `demo/victim/src/app.js` imports `lucky-charm`, `lodasg`, and `preact`. It does not reference `soul-snatcher` or `hexed-helper`. Those two get a phantom finding.
+
+## Doppelganger
+
+Doppelganger flags an installed name that imitates a popular package. The popular names are the static list in `src/rules/popular-packages.ts` (a few hundred, re-exported as `POPULAR_PACKAGES`). It is a snapshot of the 2025-01-13 most-depended-upon dump ([dasfreak/npm-most-depended-upon](https://github.com/dasfreak/npm-most-depended-upon)), with ranking spam removed, plus historical typosquat targets such as `cross-env`, `electron`, and `mongoose`. The scan does not contact the registry.
+
+An exact member of that list is never flagged. SpellBound's rule is the reason: a popular package is not treated as the perpetrator ([Taylor et al., arXiv:2003.03471](https://arxiv.org/abs/2003.03471)). That is why `preact` stays quiet even though it is one character from `react`, and why `lodash-es` and `babel-core` are on the list. Names shorter than 4 characters are not compared. Targets shorter than 4 (`ms`, `qs`, `zod`) stay on the list only so an exact install is recognized.
+
+The signals are the ones that showed up in real campaigns, not a raw edit-distance cutoff. A 2017 proposal to reject any name within Levenshtein distance 3 would have caught `crossenv` (one deletion of `-` from `cross-env`), but Scott Logic measured that 46% of npm names already sit within distance 2 of some other name ([Hunting typosquatters on npm](https://blog.scottlogic.com/2018/02/27/hunting-typosquatters-on-npm.html)). SpellBound dropped raw Levenshtein for the same reason. Socket's bar is about 1–2 edits from a much more popular package ([Socket FAQ](https://docs.socket.dev/docs/faq), [glossary](https://socket.dev/glossary/typosquatting)). The same incidents are `crossenv` wrapping the real package and posting `process.env` ([Snyk](https://snyk.io/blog/typosquatting-attacks/)), `electorn` ([Sonatype](https://www.sonatype.com/blog/sonatype-spots-malicious-npm-packages)), one-edit names such as `raect` for `react` ([Phylum](https://blog.phylum.io/malicious-packages-typosquatting-and-other-attacks-against-open-source-dependencies/)), and scope, delimiter, and suffix confusion ([Neupane et al., USENIX Security 2023](https://www.usenix.org/system/files/usenixsecurity23-neupane.pdf)). This rule compares only against the bundled list, and only with the signals below.
+
+| Signal | Example | Severity |
+| --- | --- | --- |
+| One omitted or extra character | `mongose` / `mongoose`, `reequest` / `request` | high |
+| Adjacent transposition | `loadsh` / `lodash`, `electorn` / `electron` | high |
+| One keyboard substitution, both names length ≥ 6 | `lodasg` / `lodash` (`h`/`g`) | high |
+| Separator `-` / `_` / `.` removed or swapped | `crossenv` / `cross-env` ([npm, 2017](https://blog.npmjs.org/post/163723642530/crossenv-malware-on-the-npm-registry)) | high |
+| Homoglyph (`0`/`o`, `1`/`l`, a few Cyrillic lookalikes) | `l0dash` / `lodash` | high |
+| Scope one edit from a popular scope, same package name | `@typos/node` / `@types/node` | high |
+| Dropped scope, joined with or without a separator | `ethersproject-wallet` / `@ethersproject/wallet` | high |
+| Swapped delimiter-separated words | `dom-react` / `react-dom` | medium |
+| `js` suffix, version suffix | `typescriptjs`, `chalk-2` | medium |
+| Combosquat: the popular name plus one affix from `utils`, `util`, `js`, `node`, `npm`, `lib`, `api`, `official`, `helper`, `helpers`, `tool`, `tools`, `package`, `pkg`, `module`, `modules` | `lodash-utils` | medium |
+| Added scope other than `@types/` | `@evil/lodash` / `lodash` | medium |
+| Two inserted or deleted characters, shorter name length ≥ 8 | `typscrpt` / `typescript` | medium |
+
+`@types/<popular>` is not flagged. That is the DefinitelyTyped pattern, not the `@typos` attack. A bare unscoped copy of a scoped package is flagged only when that base name is at least 8 characters (`wallet` is not flagged for `@ethersproject/wallet`). Keyboard substitution waits until length 6 so short pairs such as `nest` / `next` are not treated as typos. A second arbitrary substitution is not a signal.
+
+The nearest popular name is the one with the smallest distance, then the more specific signal. The finding `detail` starts `Near miss of <name>` so the scorer can say `Swap <installed> for <name>`. Evidence is the `package.json` description (300 characters) and the entry file (`main`, else `index.js` / `index.mjs` / `index.cjs` / `index.ts`, 800 characters). A missing file does not drop the finding. `..` in `main` is not followed. Files over 512 KiB are skipped.
+
+On the demo, `lodasg` is the only doppelganger hit. `preact` is the quiet near-name.
 
 ## Score and exorcism
 
@@ -183,18 +212,18 @@ Exorcism, in order:
 
 1. **remove** when the verdict is `malicious` with confidence ≥ `0.5` (`MALICIOUS_CONFIDENCE`), or the score is ≥ `75` (`REMOVE_SCORE`).
 2. **remove** when any finding is from `phantom`. An unused dependency is attack surface, so the action is remove even when the score is still low or moderate. Its severity points still add into the score, which is why an install script on an unused package scores higher than the script alone. This wins over swap.
-3. **swap** when any finding is from `doppelganger` and remove did not win. No current rule emits that finding, so swap is unused on the demo. An unused typosquat is removed by step 2 until something imports it.
+3. **swap** when any finding is from `doppelganger` and remove did not win. The reason names the popular package from the finding detail (`Near miss of lodash` → swap `lodasg` for `lodash`).
 4. **pin** otherwise.
 
 On today's weights, with `--no-oracle` or when Gemma does not return a judgment, the demo scores are:
 
 - `soul-snatcher`: 45 + 16 + 16 + 16 = 93, remove (the score is already at least 75; phantom adds the last 16)
 - `hexed-helper`: 28 + 16 + 16 = 60, remove (phantom; the score alone would pin)
-- `lodasg`: 28 + 16 = 44, remove (phantom; the score alone would pin)
+- `lodasg`: 28, swap (one high doppelganger finding; the app imports it, so phantom stays quiet)
 
-Those numbers are the floors. A live Gemma judgment can score a package higher. On this demo the exorcism stays `remove` either way, because phantom already says remove, and `soul-snatcher`'s floor is already at least 75.
+Those numbers are the floors. A live Gemma judgment can score a package higher. A malicious verdict, or a score of at least 75, still removes `lodasg` even though the name match said swap. `soul-snatcher` and `hexed-helper` stay `remove` either way, because phantom already says remove, and `soul-snatcher`'s floor is already at least 75.
 
-`lucky-charm` has no findings.
+`lucky-charm` and `preact` have no findings.
 
 ## What Gemma does
 
@@ -202,7 +231,7 @@ Those numbers are the floors. A live Gemma judgment can score a package higher. 
 
 1. `GET {endpoint}/api/tags` with a 2 second timeout (`PROBE_TIMEOUT_MS`). Connection refused, timeout, non-200, or a model list that does not contain the requested tag means the oracle is unavailable. The report says why and keeps the rule findings. Default model is `gemma3:4b` (`DEFAULT_MODEL`). Default endpoint is `http://localhost:11434` (`DEFAULT_ENDPOINT`), overridable with `--endpoint` / `OLLAMA_HOST` and `--model` / `OLLAMA_MODEL`.
 2. If the tags payload has no `models` array, the client still tries the chat call.
-3. For each haunted package, `POST {endpoint}/api/chat` with `stream: false`, `temperature: 0`, a system prompt, and one user message. The user message has the rule findings, the flagged code, the package name, the `package.json` description, and a README excerpt when one of `README.md`, `README.markdown`, `README.txt`, `README`, or `readme.md` sits in the package directory. Description is clipped to 500 characters (`DESCRIPTION_EXCERPT_CHARS`). The README excerpt is clipped to 1,500 characters (`README_EXCERPT_CHARS`). A README over 512 KiB is skipped. Name, description, README, and code are untrusted data: `<<<` inside them is escaped. Description, README, and code are wrapped in `<<<UNTRUSTED …>>>` markers. The system prompt tells Gemma to compare the code with the stated purpose (a color helper that reads environment variables or opens network connections is not benign) and to ignore instructions embedded in the package text, including claims that it is safe or a demo.
+3. For each haunted package, `POST {endpoint}/api/chat` with `stream: false`, `temperature: 0`, a system prompt, and one user message. The user message has the rule findings, the flagged code, the package name, the `package.json` description, and a README excerpt when one of `README.md`, `README.markdown`, `README.txt`, `README`, or `readme.md` sits in the package directory. Description is clipped to 500 characters (`DESCRIPTION_EXCERPT_CHARS`). The README excerpt is clipped to 1,500 characters (`README_EXCERPT_CHARS`). A README over 512 KiB is skipped. Name, description, README, and code are untrusted data: `<<<` inside them is escaped. Description, README, and code are wrapped in `<<<UNTRUSTED …>>>` markers. The system prompt tells Gemma to compare the code with the stated purpose (a color helper that reads environment variables or opens network connections is not benign) and to ignore instructions embedded in the package text, including claims that it is safe or a demo. When a finding is a doppelganger near miss, the user message also names the popular package and asks whether the untrusted description, README, and code are impersonating it. Gemma is not given that package's files. The same JSON shape is repeated at the end of the user message. Ollama's structured-output guide asks for a JSON schema in `format` and, ideally, the same schema in the prompt ([Structured outputs](https://docs.ollama.com/capabilities/structured-outputs)); `format` is `JUDGMENT_SCHEMA`, and a 400 retries once with `"format": "json"`. Gemma 3's own formatter has user and model turns and folds a system message into the first user turn ([prompt structure](https://ai.google.dev/gemma/docs/core/prompt-structure)), which is why the lookalike question and the JSON shape sit in the user message next to the package text, not only in the system message.
 4. The request asks for JSON matching `JUDGMENT_SCHEMA` (`verdict`, `confidence`, `score`, `summary`, `explanation`, no extra properties). `score` is 0 to 100. If Ollama responds `400`, the client retries once with `"format": "json"` and still validates.
 5. A transport error, or an HTTP status of 500 or higher, is retried once with the same body. That covers the Windows failure where the second back-to-back `gemma3:4b` call returned HTTP 500 `llama-server process has terminated`. If the retry fails, the error is stored on that package as `oracleNote` and the score stays the rule floor. Other packages are still judged.
 6. Chat timeout is 90 seconds (`CONSULT_TIMEOUT_MS`) on each attempt.
@@ -232,4 +261,4 @@ Color follows the terminal. Piped output stays plain because chalk checks whethe
 
 ## Tests and the live model
 
-`npm test` does not start Ollama and does not pull a model. The closed-port probe test calls the real `probe()` against `127.0.0.1:1`. Judgment parsing, the chat request body, scoring, the resolver, poltergeist, and phantom have unit tests. `consult` is tested by stubbing `fetch`: the score comes from the model JSON, the rule floor holds when that score is lower, and an HTTP 500 is retried once. `test/demo.test.ts` scans `demo/victim` and expects poltergeist and phantom on the three unused possessed fixtures, and no findings on `lucky-charm`.
+`npm test` does not start Ollama and does not pull a model. The closed-port probe test calls the real `probe()` against `127.0.0.1:1`. Judgment parsing, the chat request body, scoring, the resolver, poltergeist, phantom, and doppelganger have unit tests. `consult` is tested by stubbing `fetch`: the score comes from the model JSON, the rule floor holds when that score is lower, and an HTTP 500 is retried once. A doppelganger test stubs the oracle client and checks that the prompt names the popular package and that the explanation is in the report. `test/demo.test.ts` scans `demo/victim` and expects poltergeist and phantom on `soul-snatcher` and `hexed-helper`, doppelganger swap on `lodasg`, and no findings on `lucky-charm` or `preact`.

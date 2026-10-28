@@ -10,6 +10,7 @@
     "hexed-helper": "file:../packages/hexed-helper",
     "lodasg": "file:../packages/lodasg",
     "lucky-charm": "file:../packages/lucky-charm",
+    "preact": "file:../packages/preact",
     "soul-snatcher": "file:../packages/soul-snatcher"
   }
 }

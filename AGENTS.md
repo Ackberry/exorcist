@@ -11,7 +11,7 @@ Exorcist is a small TypeScript CLI. Read these before editing, and treat them as
 
 Update `docs/STATUS.md` so it still matches the code. Update `README.md`, `docs/ARCHITECTURE.md`, and `docs/CONVENTIONS.md` when the change affects behavior, usage, architecture, or the conventions they describe.
 
-Do not describe a plan as a working feature. A rule returns no findings while its `status` is `"stub"`. Doppelganger and revenant are stubs. Phantom is active.
+Do not describe a plan as a working feature. A rule returns no findings while its `status` is `"stub"`. Revenant is a stub. Poltergeist, doppelganger, and phantom are active.
 
 ## The model
 

@@ -88,10 +88,13 @@ describe("scorer", () => {
 
     const doppel = finding({
       rule: "doppelganger",
-      title: "name is close to lodash",
+      title: "name imitates lodash",
       severity: "high",
+      detail: "Near miss of lodash (one substitution). Swap lodasg for lodash.",
     });
-    expect(judgePackage(pkg, [doppel], null, null).exorcism).toBe("swap");
+    const swapped = judgePackage(pkg, [doppel], null, null);
+    expect(swapped.exorcism).toBe("swap");
+    expect(swapped.exorcismReason).toContain("Swap lodasg for lodash");
     expect(judgePackage(pkg, [doppel, ...severe], null, null).exorcism).toBe("remove");
 
     const phantom = finding({
