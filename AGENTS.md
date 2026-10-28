@@ -15,6 +15,6 @@ Do not describe a plan as a working feature. A rule returns no findings while it
 
 ## The model
 
-Gemma running locally through Ollama judges suspect code and sets the risk score (`src/oracle.ts`, default model `gemma3:4b`). Rules decide who is a suspect. The rule total is a floor: Gemma can raise the score and cannot lower it. Do not replace Gemma with a cloud API. The scan must still write a report when Ollama is not running. With `--no-oracle`, the score is the rule total only.
+Gemma running locally through Ollama judges suspect code and sets the risk score (default model `gemma3:4b`). A Mastra workflow (`src/workflow.ts`) runs resolve, rules, the judge, and the score. The judge is a Mastra agent with structured output and no tools (`src/judge.ts`): `gemma3:4b` through Ollama does not support tool calls. Rules decide who is a suspect. The rule total is a floor: Gemma can raise the score and cannot lower it. Do not replace Gemma with a cloud API. The scan must still write a report when Ollama is not running. With `--no-oracle`, the score is the rule total only.
 
 Exorcist reads package source. It does not execute it.

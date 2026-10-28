@@ -22,9 +22,8 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
 
-  const major = Number(process.versions.node.split(".")[0]);
-  if (!Number.isFinite(major) || major < 20) {
-    console.error("Exorcist needs Node.js 20 or newer.");
+  if (!nodeSupportsMastra()) {
+    console.error("Exorcist needs Node.js 22.13 or newer.");
     return 1;
   }
 
@@ -45,6 +44,16 @@ export async function main(argv: readonly string[]): Promise<number> {
     console.error(chalk.red(errorMessage(error)));
     return 1;
   }
+}
+
+/** @mastra/core declares engines.node >=22.13.0. */
+function nodeSupportsMastra(): boolean {
+  const parts = process.versions.node.split(".");
+  const major = Number(parts[0]);
+  const minor = Number(parts[1]);
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) return false;
+  if (major > 22) return true;
+  return major === 22 && minor >= 13;
 }
 
 function isEntrypoint(): boolean {

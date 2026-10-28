@@ -8,22 +8,22 @@ Exorcist is a small ESM TypeScript CLI. Rules are the cheap filter. Gemma reads 
 package-lock.json
         |
         v
-  resolveInstalled          src/resolver.ts
+  resolve                    Mastra step, src/workflow.ts
+        |                    src/resolver.ts
+        v
+  rules                      src/scanner.ts, src/rules/*
         |
         v
-  runRules                  src/scanner.ts
-        |                   src/rules/*
-        v
-  haunted packages only
+  prepare                    probe /api/tags, keep haunted packages
         |
         +---- Ollama down or --no-oracle --> score is the rule floor
         |
         v
-  probe /api/tags, then one /api/chat per haunted package
-        |                   src/oracle.ts  (model gemma3:4b by default)
+  judge                      one package at a time, src/judge.ts
+        |                    Mastra agent, no tools, Ollama JSON schema
         v
-  model score, not below the rule floor
-        |                   src/scorer.ts
+  score                      rule floor, src/scorer.ts
+        |
         v
   exorcism
         |
@@ -32,7 +32,7 @@ package-lock.json
                             src/report.ts
 ```
 
-`src/haunt.ts` is the function that runs those steps. `src/cli.ts` parses argv and writes the file. Library callers can use `haunt` from `src/index.ts` without the CLI.
+`src/haunt.ts` starts that workflow. `src/cli.ts` parses argv and writes the file. Library callers can use `haunt` from `src/index.ts` without the CLI.
 
 Phantom is the rule that reads the target project's own source. The other rules only see installed packages.
 
@@ -50,10 +50,12 @@ Calls to the model are sequential, one per haunted package, so a laptop-sized Ol
 | `src/rules/phantom.ts`      | Direct dependency the project never imports or names in a script.                               |
 | `src/rules/index.ts`        | `rules` array, in the order findings are collected.                                             |
 | `src/scanner.ts`            | Runs every rule. One rule throwing fails the scan, with the rule name and package in the error. |
-| `src/oracle.ts`             | Ollama client, prompt, stated purpose, truncation, JSON validation, one retry.                  |
+| `src/oracle.ts`             | Prompt, stated purpose, truncation, `/api/tags` probe, JSON validation. `consult` calls the judge. |
+| `src/judge.ts`              | Mastra agent. No tools. Ollama `format` schema, temperature 0, one retry.                       |
+| `src/workflow.ts`           | Mastra workflow `haunt`: resolve, rules, prepare, judge, score. No server and no storage.       |
 | `src/scorer.ts`             | Rule floor, model score, and exorcism.                                                          |
 | `src/report.ts`             | Terminal text and Markdown.                                                                     |
-| `src/haunt.ts`              | Pipeline. Accepts an `oracleClient` so tests do not need a live model.                          |
+| `src/haunt.ts`              | Starts the workflow. Accepts an `oracleClient` so tests do not need a live model.               |
 | `src/args.ts`               | Flag and env parsing.                                                                           |
 | `src/cli.ts`                | Bin entry. Shebang lives here; `tsc` keeps it. Sets `process.exitCode` and does not call `process.exit`. |
 
@@ -220,9 +222,15 @@ Those numbers are the floors. A live Gemma judgment can score a package higher. 
 
 `lucky-charm` and `preact` have no findings.
 
+## Why Mastra
+
+The scan is a fixed sequence, so it is a Mastra workflow rather than a tool-calling agent. `src/workflow.ts` defines `haunt` with five steps: `resolve`, `rules`, `prepare`, `judge`, and `score`. Rules still choose the suspects. The judge step walks haunted packages one at a time so a laptop-sized Ollama is not handed the whole tree. Quiet packages are never sent. `--no-oracle` skips the probe and the agent. The workflow does not persist snapshots and does not start a Mastra server, playground, or database.
+
+The judge is a Mastra agent in `src/judge.ts`. It has no tools. On this machine Ollama 0.40.11 answered `POST /api/chat` for `gemma3:4b` with a tools array with HTTP 400 and `registry.ollama.ai/library/gemma3:4b does not support tools`. Structured output uses Ollama's native `format` field (a JSON schema, or `"json"` after a schema 400), through `ollama-ai-provider-v2`, which posts to `{endpoint}/api/chat`. The same prompts, untrusted-data fences, temperature 0, and one retry stay in place. `@mastra/core` requires Node.js 22.13 or newer.
+
 ## What Gemma does
 
-`oracle.ts` talks to Ollama's local HTTP API.
+The agent in `src/judge.ts` talks to Ollama's local HTTP API. `src/oracle.ts` still builds the prompt and validates the JSON.
 
 1. `GET {endpoint}/api/tags` with a 2 second timeout (`PROBE_TIMEOUT_MS`). Connection refused, timeout, non-200, or a model list that does not contain the requested tag means the oracle is unavailable. The report says why and keeps the rule findings. Default model is `gemma3:4b` (`DEFAULT_MODEL`). Default endpoint is `http://localhost:11434` (`DEFAULT_ENDPOINT`), overridable with `--endpoint` / `OLLAMA_HOST` and `--model` / `OLLAMA_MODEL`.
 2. If the tags payload has no `models` array, the client still tries the chat call.
@@ -256,4 +264,4 @@ Color follows the terminal. Piped output stays plain because chalk checks whethe
 
 ## Tests and the live model
 
-`npm test` does not start Ollama and does not pull a model. The closed-port probe test calls the real `probe()` against `127.0.0.1:1`. Judgment parsing, the chat request body, scoring, the resolver, poltergeist, phantom, and doppelganger have unit tests. `consult` is tested by stubbing `fetch`: the score comes from the model JSON, the rule floor holds when that score is lower, and an HTTP 500 is retried once. A doppelganger test stubs the oracle client and checks that the prompt names the popular package and that the explanation is in the report. `test/demo.test.ts` scans `demo/victim` and expects poltergeist and phantom on `soul-snatcher` and `hexed-helper`, doppelganger swap on `lodasg`, and no findings on `lucky-charm` or `preact`.
+`npm test` does not start Ollama and does not pull a model. The closed-port probe test calls the real `probe()` against `127.0.0.1:1`. Judgment parsing, the chat request body, scoring, the resolver, poltergeist, phantom, and doppelganger have unit tests. `consult` is tested by stubbing `fetch`: the score comes from the model JSON, the rule floor holds when that score is lower, the body has no `tools` field, the `format` schema is sent to `/api/chat`, and an HTTP 500 is retried once. A doppelganger test stubs the oracle client and checks that the prompt names the popular package and that the explanation is in the report. `test/demo.test.ts` scans `demo/victim` and expects poltergeist and phantom on `soul-snatcher` and `hexed-helper`, doppelganger swap on `lodasg`, and no findings on `lucky-charm` or `preact`.
