@@ -35,3 +35,16 @@ jobs:
       - run: npm run build
       # The runner has no Ollama. A scan must still finish from the rules alone.
       - run: node dist/cli.js demo/victim --no-oracle
+
+  audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22.13"
+      # Exorcist scans other projects' dependencies, so its own are checked too.
+      # The lockfile is enough; this needs no npm ci. A moderate or low advisory
+      # does not fail the job, because neither blocks a release here.
+      - run: npm audit --audit-level=high
