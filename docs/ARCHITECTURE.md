@@ -53,6 +53,7 @@ Calls to the model are sequential, one per haunted package, so a laptop-sized Ol
 | `src/oracle.ts`             | Prompt, stated purpose, truncation, `/api/tags` probe, JSON validation. `consult` calls the judge. |
 | `src/judge.ts`              | Mastra agent. No tools. Ollama `format` schema, temperature 0, one retry.                       |
 | `src/workflow.ts`           | Mastra workflow `haunt`: resolve, rules, prepare, judge, score. No server and no storage.       |
+| `src/tracing.ts`            | Opt-in Sentry exporter. Loaded only when `SENTRY_DSN` is set.                                   |
 | `src/scorer.ts`             | Rule floor, model score, and exorcism.                                                          |
 | `src/report.ts`             | Terminal text and Markdown.                                                                     |
 | `src/haunt.ts`              | Starts the workflow. Accepts an `oracleClient` so tests do not need a live model.               |
@@ -227,6 +228,8 @@ Those numbers are the floors. A live Gemma judgment can score a package higher. 
 The scan is a fixed sequence, so it is a Mastra workflow rather than a tool-calling agent. `src/workflow.ts` defines `haunt` with five steps: `resolve`, `rules`, `prepare`, `judge`, and `score`. Rules still choose the suspects. The judge step walks haunted packages one at a time so a laptop-sized Ollama is not handed the whole tree. Quiet packages are never sent. `--no-oracle` skips the probe and the agent. The workflow does not persist snapshots and does not start a Mastra server, playground, or database.
 
 The judge is a Mastra agent in `src/judge.ts`. It has no tools. On this machine Ollama 0.40.11 answered `POST /api/chat` for `gemma3:4b` with a tools array with HTTP 400 and `registry.ollama.ai/library/gemma3:4b does not support tools`. Structured output uses Ollama's native `format` field (a JSON schema, or `"json"` after a schema 400), through `ollama-ai-provider-v2`, which posts to `{endpoint}/api/chat`. The same prompts, untrusted-data fences, temperature 0, and one retry stay in place. `@mastra/core` requires Node.js 22.13 or newer.
+
+When `SENTRY_DSN` is set, `src/tracing.ts` attaches Mastra's `SentryExporter` (`@mastra/sentry` with `@mastra/observability`) to a Mastra instance that owns the `haunt` workflow, then flushes and shuts the exporter down before `haunt` returns. The CLI still sets `process.exitCode` and does not call `process.exit()`. With no DSN, that instance is not created and nothing is sent. Traces hide span input and output, and a processor drops agent instructions, unless `SENTRY_TRACE_CONTENT` is `1` or `true`. The judge step records the model plus each package name, verdict, and score as span metadata. Outgoing HTTP bodies stay off. A tracing failure is printed and the scan still writes the report. Snapshots stay off. The instance sets `logger: false` and `workers: false`; Mastra's constructor still allocates its unused in-memory store.
 
 ## What Gemma does
 

@@ -80,6 +80,9 @@ Environment overrides, used when the matching flag is absent:
 | -------------- | ----------------------------------------------------------------------------- |
 | `OLLAMA_MODEL` | Same as `--model`.                                                            |
 | `OLLAMA_HOST`  | Same as `--endpoint`. Ollama's own variable. `127.0.0.1:11434` or a full URL. |
+| `SENTRY_DSN`   | Opt-in Sentry agent trace for this scan. Unset means nothing is sent.        |
+| `SENTRY_TRACE_CONTENT` | Set to `1` to include prompts and model text. Default is metadata only: step names, model, latency, tokens, and verdict. |
+| `SENTRY_ENVIRONMENT` | Optional trace environment. Default `local`.                             |
 
 Exit code `0` means the scan finished, even if packages are haunted. Exit code `1` means the scan could not run (bad arguments, missing directory, unreadable or unsupported lockfile). The process sets that code and waits until open handles finish closing.
 
