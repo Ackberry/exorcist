@@ -73,7 +73,7 @@ From `docs/STATUS.md`, `docs/ARCHITECTURE.md`, and `README.md`.
 | Local Gemma (`gemma3:4b` via Ollama) judges suspects. Not fine-tuned, not served on Google Cloud. Local is one of the three Gemma modes. | done |
 | The open model is what makes the project work | todo in the write-up. The scan still writes a rules-only report when Ollama is down or `--no-oracle` is set. Gemma can raise the score and cannot lower it. |
 | Mastra workflow `haunt` (`src/workflow.ts`) runs resolve, rules, the judge, and the score. The judge (`src/judge.ts`) is a Mastra agent over Gemma, with structured output, no tools, and no memory. | done for "orchestrate an agent over open models". Memory, tools, and GitHub-issue triage are not in this repo. `gemma3:4b` on Ollama returns HTTP 400 if given tools. |
-| Sentry traces or screenshots of setup, latency, tokens, cost, and debugging | todo. The tree does not mention Sentry. |
+| Sentry traces or screenshots of setup, latency, tokens, cost, and debugging | code is opt-in via `SENTRY_DSN` (`src/tracing.ts`, Mastra `SentryExporter`). Screenshots for the write-up are still todo. No DSN is committed. |
 | A live `.tech` name claimed through Hacktoberfest, linked in the post | todo. This file does not claim that promo. |
 | One published DEV post: template, both tags, demo link or video, repo link, theme, and the four category names | todo. `demo/victim` is a local demo, not a deployed URL or a video. |
 | Optional agent-session embed | todo. See below. |

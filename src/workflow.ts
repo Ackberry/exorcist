@@ -7,6 +7,7 @@ import { type OracleClient, ollamaClient } from "./oracle.js";
 import { resolveInstalled } from "./resolver.js";
 import { groupFindings, runRules, summarizeRules } from "./scanner.js";
 import { judgePackage } from "./scorer.js";
+import { enableSentryTracing, withJudgeTrace } from "./tracing.js";
 import type {
   Finding,
   HauntingReport,
@@ -135,7 +136,7 @@ const judgeStep = createStep({
   inputSchema: preparedSchema,
   outputSchema: judgedSchema,
   retries: 0,
-  execute: async ({ inputData, requestContext }) => {
+  execute: async ({ inputData, requestContext, tracingContext }) => {
     const client = readClient(requestContext);
     const haunted = inputData.haunted as { pkg: InstalledPackage; findings: Finding[] }[];
     const judged: {
@@ -150,16 +151,28 @@ const judgeStep = createStep({
         continue;
       }
       try {
-        const judgment = await client.consult({
-          target: { endpoint: inputData.endpoint, model: inputData.model },
-          pkg: row.pkg,
-          findings: row.findings,
-        });
+        const judgment = await withJudgeTrace(tracingContext, () =>
+          client.consult({
+            target: { endpoint: inputData.endpoint, model: inputData.model },
+            pkg: row.pkg,
+            findings: row.findings,
+          }),
+        );
         judged.push({ ...row, judgment, oracleNote: null });
       } catch (error) {
         judged.push({ ...row, judgment: null, oracleNote: errorMessage(error) });
       }
     }
+    tracingContext?.currentSpan?.update({
+      metadata: {
+        model: inputData.model,
+        judgments: judged.map((row) => ({
+          package: row.pkg.name,
+          verdict: row.judgment?.verdict ?? null,
+          score: row.judgment?.score ?? null,
+        })),
+      },
+    });
     return { ...inputData, judged };
   },
 });
@@ -224,11 +237,20 @@ export async function runHauntWorkflow(
 ): Promise<HauntingReport> {
   const requestContext = new RequestContext();
   requestContext.set(ORACLE_CLIENT, client);
-  const run = await hauntWorkflow.createRun();
-  const result = await run.start({ inputData: input, requestContext });
-  if (result.status === "success") return result.result as HauntingReport;
-  if (result.status === "failed") throw new Error(result.error.message);
-  throw new Error(`Haunt workflow ended with status ${result.status}.`);
+  const tracing = await enableSentryTracing(hauntWorkflow);
+  try {
+    const run = await hauntWorkflow.createRun();
+    const result = await run.start({
+      inputData: input,
+      requestContext,
+      ...(tracing ? { tracingOptions: tracing.options } : {}),
+    });
+    if (result.status === "success") return result.result as HauntingReport;
+    if (result.status === "failed") throw new Error(result.error.message);
+    throw new Error(`Haunt workflow ended with status ${result.status}.`);
+  } finally {
+    await tracing?.flush();
+  }
 }
 
 function readClient(requestContext: RequestContext): OracleClient {
