@@ -61,9 +61,12 @@ function isEntrypoint(): boolean {
 }
 
 if (isEntrypoint()) {
+  // Set the code and let the event loop drain. process.exit() on Windows can
+  // trip a libuv assertion while fetch or stdout handles are still closing
+  // (UV_HANDLE_CLOSING in src/win/async.c). Exit codes stay 0 and 1.
   main(process.argv.slice(2))
     .then((code) => {
-      process.exit(code);
+      process.exitCode = code;
     })
     .catch((error: unknown) => {
       console.error(errorMessage(error));

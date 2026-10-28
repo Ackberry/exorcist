@@ -12,7 +12,7 @@ export { renderMarkdown } from "./report.js";
 export { resolveInstalled } from "./resolver.js";
 export { rules } from "./rules/index.js";
 export { runRules } from "./scanner.js";
-export { hauntingScore, SEVERITY_WEIGHTS } from "./scorer.js";
+export { hauntingScore, ruleFloor, SEVERITY_WEIGHTS } from "./scorer.js";
 export type {
   Exorcism,
   Finding,

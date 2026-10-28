@@ -87,6 +87,7 @@ describe("haunt", () => {
         return {
           verdict: "malicious",
           confidence: 0.9,
+          score: 90,
           summary: "It prints an env var from an install script.",
           explanation: "postinstall plus process.env.",
         };

@@ -55,6 +55,7 @@ const report: HauntingReport = {
       judgment: {
         verdict: "suspicious",
         confidence: 0.72,
+        score: 61,
         summary: "It encodes a dummy token during install.",
         explanation: "The script does not open a socket.",
       },
@@ -84,6 +85,7 @@ describe("renderMarkdown", () => {
     expect(markdown).toContain("| 0 | — |");
     expect(markdown).toContain("| doppelganger | stub | 0 |");
     expect(markdown).toContain("**suspicious**");
+    expect(markdown).toContain("Model score: 61");
     expect(markdown).toContain("It encodes a dummy token during install.");
     expect(markdown).toContain("node postinstall.js");
     expect(markdown).toContain("does not execute");

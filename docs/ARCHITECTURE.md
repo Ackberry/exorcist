@@ -1,6 +1,6 @@
 # Architecture
 
-Exorcist is a small ESM TypeScript CLI. Rules are the cheap filter. Gemma is the reader for code a rule already flagged. The scan still finishes when Ollama is down.
+Exorcist is a small ESM TypeScript CLI. Rules are the cheap filter. Gemma reads code a rule already flagged and sets the risk score, which cannot fall below the rule total. The scan still finishes when Ollama is down.
 
 ## Pipeline
 
@@ -16,13 +16,16 @@ package-lock.json
         v
   haunted packages only
         |
-        +---- Ollama down or --no-oracle --> score from rules
+        +---- Ollama down or --no-oracle --> score is the rule floor
         |
         v
   probe /api/tags, then one /api/chat per haunted package
         |                   src/oracle.ts  (model gemma3:4b by default)
         v
-  haunting score + exorcism src/scorer.ts
+  model score, not below the rule floor
+        |                   src/scorer.ts
+        v
+  exorcism
         |
         v
   terminal + haunting-report.md
@@ -47,12 +50,12 @@ Calls to the model are sequential, one per haunted package, so a laptop-sized Ol
 | `src/rules/phantom.ts`      | Direct dependency the project never imports or names in a script.                               |
 | `src/rules/index.ts`        | `rules` array, in the order findings are collected.                                             |
 | `src/scanner.ts`            | Runs every rule. One rule throwing fails the scan, with the rule name and package in the error. |
-| `src/oracle.ts`             | Ollama client, prompt, truncation, JSON validation.                                             |
-| `src/scorer.ts`             | Score and exorcism.                                                                             |
+| `src/oracle.ts`             | Ollama client, prompt, stated purpose, truncation, JSON validation, one retry.                  |
+| `src/scorer.ts`             | Rule floor, model score, and exorcism.                                                          |
 | `src/report.ts`             | Terminal text and Markdown.                                                                     |
 | `src/haunt.ts`              | Pipeline. Accepts an `oracleClient` so tests do not need a live model.                          |
 | `src/args.ts`               | Flag and env parsing.                                                                           |
-| `src/cli.ts`                | Bin entry. Shebang lives here; `tsc` keeps it.                                                  |
+| `src/cli.ts`                | Bin entry. Shebang lives here; `tsc` keeps it. Sets `process.exitCode` and does not call `process.exit`. |
 
 ## Data types
 
@@ -80,7 +83,7 @@ interface Rule {
 
 `status` is reported as-is. A stub is not inferred from zero findings, because a finished rule can also find nothing.
 
-`OracleJudgment` is `{ verdict, confidence, summary, explanation }`. `verdict` is `benign`, `suspicious`, or `malicious`. `confidence` is 0 to 1. `summary` is the plain-English description of the code.
+`OracleJudgment` is `{ verdict, confidence, score, summary, explanation }`. `verdict` is `benign`, `suspicious`, or `malicious`. `confidence` is 0 to 1. `score` is Gemma's risk score from 0 to 100, before the rule floor is applied. `summary` is the plain-English description of the code.
 
 `PackageHaunting` is a package with at least one finding, plus its score and exorcism. Quiet packages are `QuietPackage` rows with an implicit score of 0 and no exorcism.
 
@@ -170,15 +173,11 @@ Rule weights (`SEVERITY_WEIGHTS`):
 | low      | 8      |
 | info     | 3      |
 
-The rule total is capped at 100. If Gemma returned a valid judgment, add `ORACLE_NUDGE[verdict] * confidence`:
+`ruleFloor` is that total capped at 100. With no judgment (`--no-oracle`, Ollama down, or a failed call), `hauntingScore` is the floor. That is the same number the scorer reported before Gemma supplied a score.
 
-| Verdict    | Nudge |
-| ---------- | ----- |
-| malicious  | +20   |
-| suspicious | +8    |
-| benign     | -18   |
+When Gemma returns a valid judgment, the haunting score is the higher of `ruleFloor` and the model's `score`. The model can raise the score. It cannot talk it down. A comment in the package that says the code is safe does not reduce the floor: the floor is computed from the findings, and the package text is only data in the prompt.
 
-The result is clamped to 0–100 and rounded. The oracle never removes a package from the report. It only moves the score, and a malicious verdict can change the exorcism.
+The oracle never removes a package from the report. A higher model score can cross `REMOVE_SCORE` and change the exorcism. A malicious verdict still can, too.
 
 Exorcism, in order:
 
@@ -187,11 +186,13 @@ Exorcism, in order:
 3. **swap** when any finding is from `doppelganger` and remove did not win. No current rule emits that finding, so swap is unused on the demo. An unused typosquat is removed by step 2 until something imports it.
 4. **pin** otherwise.
 
-On today's weights, before any oracle nudge, the demo scores are:
+On today's weights, with `--no-oracle` or when Gemma does not return a judgment, the demo scores are:
 
 - `soul-snatcher`: 45 + 16 + 16 + 16 = 93, remove (the score is already at least 75; phantom adds the last 16)
 - `hexed-helper`: 28 + 16 + 16 = 60, remove (phantom; the score alone would pin)
 - `lodasg`: 28 + 16 = 44, remove (phantom; the score alone would pin)
+
+Those numbers are the floors. A live Gemma judgment can score a package higher. On this demo the exorcism stays `remove` either way, because phantom already says remove, and `soul-snatcher`'s floor is already at least 75.
 
 `lucky-charm` has no findings.
 
@@ -201,12 +202,20 @@ On today's weights, before any oracle nudge, the demo scores are:
 
 1. `GET {endpoint}/api/tags` with a 2 second timeout (`PROBE_TIMEOUT_MS`). Connection refused, timeout, non-200, or a model list that does not contain the requested tag means the oracle is unavailable. The report says why and keeps the rule findings. Default model is `gemma3:4b` (`DEFAULT_MODEL`). Default endpoint is `http://localhost:11434` (`DEFAULT_ENDPOINT`), overridable with `--endpoint` / `OLLAMA_HOST` and `--model` / `OLLAMA_MODEL`.
 2. If the tags payload has no `models` array, the client still tries the chat call.
-3. For each haunted package, `POST {endpoint}/api/chat` with `stream: false`, `temperature: 0`, a system prompt, and the findings plus code. The request asks for JSON matching `JUDGMENT_SCHEMA` (`verdict`, `confidence`, `summary`, `explanation`, no extra properties). If Ollama responds `400`, the client retries once with `"format": "json"` and still validates.
-4. Chat timeout is 90 seconds (`CONSULT_TIMEOUT_MS`). A failure on one package is stored on that package as `oracleNote`. The other packages are still judged. The score falls back to the rules.
-5. Validation accepts a fenced block or prose around one JSON object, a case-insensitive verdict, a numeric-string confidence, and a confidence from 1 to 100 (divided by 100). Empty summary or explanation is rejected. Summary and explanation are clipped to 2,000 characters.
-6. Suspect code is joined per finding and clipped to 6,000 characters (`SUSPECT_CODE_CHAR_BUDGET`), with a note that it was truncated.
+3. For each haunted package, `POST {endpoint}/api/chat` with `stream: false`, `temperature: 0`, a system prompt, and one user message. The user message has the rule findings, the flagged code, the package name, the `package.json` description, and a README excerpt when one of `README.md`, `README.markdown`, `README.txt`, `README`, or `readme.md` sits in the package directory. Description is clipped to 500 characters (`DESCRIPTION_EXCERPT_CHARS`). The README excerpt is clipped to 1,500 characters (`README_EXCERPT_CHARS`). A README over 512 KiB is skipped. Name, description, README, and code are untrusted data: `<<<` inside them is escaped. Description, README, and code are wrapped in `<<<UNTRUSTED …>>>` markers. The system prompt tells Gemma to compare the code with the stated purpose (a color helper that reads environment variables or opens network connections is not benign) and to ignore instructions embedded in the package text, including claims that it is safe or a demo.
+4. The request asks for JSON matching `JUDGMENT_SCHEMA` (`verdict`, `confidence`, `score`, `summary`, `explanation`, no extra properties). `score` is 0 to 100. If Ollama responds `400`, the client retries once with `"format": "json"` and still validates.
+5. A transport error, or an HTTP status of 500 or higher, is retried once with the same body. That covers the Windows failure where the second back-to-back `gemma3:4b` call returned HTTP 500 `llama-server process has terminated`. If the retry fails, the error is stored on that package as `oracleNote` and the score stays the rule floor. Other packages are still judged.
+6. Chat timeout is 90 seconds (`CONSULT_TIMEOUT_MS`) on each attempt.
+7. Validation accepts a fenced block or prose around one JSON object, a case-insensitive verdict, a numeric-string confidence, and a confidence from 1 to 100 (divided by 100). `score` may be a number or a numeric string; it is rounded and clamped to 0–100. A missing score rejects the judgment. Empty summary or explanation is rejected. Summary and explanation are clipped to 2,000 characters.
+8. Suspect code is joined per finding and clipped to 6,000 characters (`SUSPECT_CODE_CHAR_BUDGET`), with a note that it was truncated.
 
 Gemma does not choose which packages are suspects. It does not see quiet packages. It does not run the code. Replacing it with a cloud API would break the reason this project is local; don't.
+
+## Build and exit
+
+`npm run build` compiles with `tsc` and then runs `scripts/mark-executable.js`, which calls `chmodSync` on `dist/cli.js`. The shell `chmod` command is not used, because it is missing on Windows.
+
+The CLI sets `process.exitCode` from `main()` and does not call `process.exit()`. On Windows, `process.exit()` during a scan has crashed Node with `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` in `src/win/async.c` while fetch or stdout handles were still closing. Letting the event loop drain keeps the same exit codes: `0` when the scan finished, `1` when it could not run.
 
 ## Report
 
@@ -223,4 +232,4 @@ Color follows the terminal. Piped output stays plain because chalk checks whethe
 
 ## Tests and the live model
 
-`npm test` does not start Ollama and does not pull a model. The closed-port probe test calls the real `probe()` against `127.0.0.1:1`. Judgment parsing, the chat request body, scoring, the resolver, poltergeist, and phantom have unit tests. `test/demo.test.ts` scans `demo/victim` and expects poltergeist and phantom on the three unused possessed fixtures, and no findings on `lucky-charm`.
+`npm test` does not start Ollama and does not pull a model. The closed-port probe test calls the real `probe()` against `127.0.0.1:1`. Judgment parsing, the chat request body, scoring, the resolver, poltergeist, and phantom have unit tests. `consult` is tested by stubbing `fetch`: the score comes from the model JSON, the rule floor holds when that score is lower, and an HTTP 500 is retried once. `test/demo.test.ts` scans `demo/victim` and expects poltergeist and phantom on the three unused possessed fixtures, and no findings on `lucky-charm`.

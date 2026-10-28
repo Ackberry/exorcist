@@ -24,7 +24,7 @@
     "url": "git+https://github.com/Ackberry/exorcist.git"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "build": "tsc -p tsconfig.build.json && node scripts/mark-executable.js",
     "start": "node dist/cli.js",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
