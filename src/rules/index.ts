@@ -9,7 +9,7 @@ export { phantomRule } from "./phantom.js";
 export { poltergeistRule } from "./poltergeist.js";
 export { revenantRule } from "./revenant.js";
 
-/** Rule order is the order findings are collected. Poltergeist and phantom are active. */
+/** Rule order is the order findings are collected. Poltergeist, doppelganger, and phantom are active. */
 export const rules: readonly Rule[] = [
   poltergeistRule,
   doppelgangerRule,

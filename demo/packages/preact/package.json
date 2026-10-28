@@ -1,0 +1,8 @@
+{
+  "name": "preact",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DEMO FIXTURE. A legitimate package one letter from react. The name is on the popular list, so doppelganger does not flag the exact name.",
+  "type": "commonjs",
+  "main": "index.js"
+}

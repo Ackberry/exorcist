@@ -1,27 +1,27 @@
 # Status
 
-Updated 2026-10-28. The Day 1 skeleton is in place, the phantom rule is active, and Gemma sets the haunting score above a rule floor. If you change behavior, update this file in the same commit so it still describes the code.
+Updated 2026-10-28. The Day 1 skeleton is in place, phantom and doppelganger are active, and Gemma sets the haunting score above a rule floor. If you change behavior, update this file in the same commit so it still describes the code.
 
 ## Done
 
 - Node 20+, TypeScript strict, ESM (`Node16`), `tsx`, `vitest`, Biome, and a `bin` entry of `exorcist` → `dist/cli.js`. Runtime dependency is `chalk` only.
 - Resolver for `package-lock.json` lockfileVersion 2 and 3, including npm's `file:` link shape and a fallback when `node_modules` is not installed.
 - Poltergeist rule: install hooks plus child process, network, `process.env`, SSH path, `.npmrc`, eval / `new Function`, and base64 signals.
-- Shared `Rule` interface. Doppelganger and revenant are registered and return `[]`. Their `status` is `"stub"`.
+- Shared `Rule` interface. Revenant is registered and returns `[]`. Its `status` is `"stub"`.
 - Phantom rule (`src/rules/phantom.ts`, `status` `"active"`). A direct dependency the project never imports, requires, or names from a root `package.json` script (including a `bin` the script runs). Production and optional dependencies are `medium`. DevDependencies are `low`. The finding's exorcism is `remove`, and its points stack with other rules.
+- Doppelganger rule (`src/rules/doppelganger.ts`, `status` `"active"`). Compares each installed name to the static list in `src/rules/popular-packages.ts`. Exact popular names and names shorter than 4 characters are not flagged. Signals are one edit (including a transposition), two edits when both names are at least 8 characters, a separator swap, a one-edit scope (`@typos` / `@types`), a dropped scope, a `.js` suffix, and a short combosquat affix. The finding names the popular package. The scorer says swap for that package unless remove wins. A doppelganger suspect is sent to Gemma with `LOOKALIKE_SCHEMA`. Gemma must set `impersonating` from the untrusted description, README, and code. The report shows `impostor of <name>` when that is true, including when the harm verdict is benign and the model score is under the rule floor.
 - Ollama client (`src/oracle.ts`) for local Gemma. Default model `gemma3:4b`, flag `--model` (for example `gemma3:1b`). Default endpoint `http://localhost:11434`. The prompt sends rule findings, flagged code, package name, `package.json` description, and a README excerpt when a README is in the package directory. That text is untrusted data. Structured JSON is requested and validated, including a `score` from 0 to 100. A transport error or HTTP 5xx on `/api/chat` is retried once (the Windows `llama-server process has terminated` 500). If Ollama is down, the model is missing, or the retry still fails, the report is still written from the rules and the message says why.
 - Scorer (0–100) and exorcism (`pin`, `remove`, `swap`). With no judgment, the score is `ruleFloor` (the severity total, capped at 100). Gemma's score is used only when it is higher than that floor. `--no-oracle` stays on the floor. A phantom finding is `remove` even when the score is under 75, unless a malicious verdict or the score threshold already removed it. That beats `swap`. Terminal report and `haunting-report.md`.
 - `npm run build` marks `dist/cli.js` executable with Node's `chmodSync` (`scripts/mark-executable.js`), so the build does not call the shell `chmod` command. The CLI sets `process.exitCode` and does not call `process.exit()`. Exit codes are unchanged: 0 when the scan finished, 1 when it could not run.
-- `demo/victim` with three possessed fixtures and one quiet control, installed from `file:` paths. `src/app.js` imports `lucky-charm` only. `npm test` covers the resolver, poltergeist, phantom, the oracle's parser, request, model score, and one Ollama retry, the scorer's rule floor, the stub return values, the pipeline with a fake client, and the demo.
+- `demo/victim` with three possessed fixtures and two quiet controls, installed from `file:` paths. `src/app.js` imports `lucky-charm`, `lodasg`, and `preact`. `npm test` covers the resolver, poltergeist, phantom, doppelganger (including a mocked Ollama swap), the oracle's parser, request, model score, and one Ollama retry, the scorer's rule floor, the revenant stub, the pipeline with a fake client, and the demo.
 
 ## Stubbed
 
-| Rule         | File                        | What it does today                                                                                                                                                                    |
-| ------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| doppelganger | `src/rules/doppelganger.ts` | Returns `[]`. `POPULAR_PACKAGES` is the list to compare against. `lodasg` is the fixture (one substitution from `lodash`, h to g). Poltergeist flags its `child_process` import. Phantom also flags it, because `demo/victim` never imports it. |
-| revenant     | `src/rules/revenant.ts`     | Returns `[]`. No registry request is made.                                                                                                                                                                                                 |
+| Rule     | File                    | What it does today                          |
+| -------- | ----------------------- | ------------------------------------------- |
+| revenant | `src/rules/revenant.ts` | Returns `[]`. No registry request is made. |
 
-`test/demo.test.ts` expects poltergeist on the three possessed fixtures and phantom on those same three, because `src/app.js` never imports them. `lucky-charm` stays quiet. Update that test when a stub starts flagging fixtures.
+`test/demo.test.ts` expects poltergeist and phantom on `soul-snatcher` and `hexed-helper`, doppelganger on `lodasg`, and no findings on `lucky-charm` or `preact`. Update that test when revenant starts flagging fixtures.
 
 ## Not built
 
@@ -43,16 +43,16 @@ Updated 2026-10-28. The Day 1 skeleton is in place, the phantom rule is active, 
 - A dev tool named only in a config file Phantom does not read is flagged at `low` and the exorcism is still `remove`. A package on disk is required to read `bin`; if the directory is missing, a script that invokes only the bin name can look unused. Shell words such as `node` and `npm` are not treated as bins.
 - Transitive dependencies are not phantom candidates. Optional dependencies are direct and use the production severity (`medium`) unless they are dev-only.
 - Oracle calls are sequential. Suspect code sent to the model is capped at 6,000 characters. The description excerpt is 500 characters. The README excerpt is 1,500 characters, and a README over 512 KiB is skipped.
+- Doppelganger does not flag an exact popular name or a name shorter than 4 characters. Two edits require both names to be at least 8 characters. Combosquat uses a fixed affix list (`utils`, `js`, `node`, and the rest named in `docs/ARCHITECTURE.md`), so `express-session` is not a hit. `@types/lodash` is not a hit. The entry-file excerpt is 800 characters. A `main` path that leaves the package directory is not read. A live `gemma3:4b` run is not recorded here; the lookalike schema is covered with a mocked Ollama response.
 - Gemma cannot score a package below `ruleFloor`. A judgment that fails validation, including one with no `score`, leaves that package on the floor.
 - `--endpoint` can be pointed off the machine. The default is local. Do not send private source to a host you do not trust.
 - The scanner does not execute package code. `npm install` in `demo/victim` does run `soul-snatcher`'s postinstall, because npm does that. The script only prints a length.
 
 ## Next
 
-Wednesday — the two rules still stubbed, in this order:
+Wednesday — the rule still stubbed:
 
-1. **Doppelganger.** Damerau-Levenshtein distance against `POPULAR_PACKAGES`. Skip exact matches and names shorter than 4 characters. Threshold 2. Put the nearest popular name in `detail` so the existing scorer emits `swap`. `lodasg` is unused in `demo/victim`, so phantom already says `remove`, and that wins over `swap`. To show `swap` on the demo, import `lodasg` from `demo/victim` (phantom then stays quiet) or accept that an unused typosquat is removed. Set `status` to `"active"` and update `test/demo.test.ts`.
-2. **Revenant.** Optional `GET https://registry.npmjs.org/<name>`. Use the `time` map and maintainers. Flag a long gap then a new release, or a maintainer change on the installed version. On any network failure, return `[]` for that package and let the scan continue. The default path must stay usable offline. Do not call the registry from unit tests; inject a fetch or a fixture. The demo packages are not on the registry; they should not become hard failures.
+1. **Revenant.** Optional `GET https://registry.npmjs.org/<name>`. Use the `time` map and maintainers. Flag a long gap then a new release, or a maintainer change on the installed version. On any network failure, return `[]` for that package and let the scan continue. The default path must stay usable offline. Do not call the registry from unit tests; inject a fetch or a fixture. The demo packages are not on the registry; they should not become hard failures.
 
 Thursday — oracle, report, and a single-package command:
 
@@ -70,5 +70,5 @@ Stretch — GitHub Action:
 - Suspects are chosen by rules. Gemma does not see the rest of the tree.
 - `Rule.status` is how the report tells a stub from a quiet rule.
 - File-link packages are one row, not two.
-- Swap is implemented in the scorer and waiting on doppelganger findings. A phantom finding is `remove` and wins over `swap`.
+- Swap is the doppelganger exorcism unless remove wins. A phantom finding is `remove` and wins over `swap`. The swap names the popular package from `Near miss of <name>` in the finding detail.
 - Tests construct temp lockfiles and temp packages. The demo is the end-to-end fixture. Do not commit `node_modules` or `haunting-report.md`.

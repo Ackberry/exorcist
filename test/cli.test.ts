@@ -27,8 +27,12 @@ describe("cli", () => {
     expect(markdown).toContain("## lodasg@1.0.0");
     expect(markdown).toContain("## hexed-helper@1.0.0");
     expect(markdown).toContain("`lucky-charm@1.0.0`");
+    expect(markdown).toContain("`preact@1.0.0`");
     expect(markdown).toContain("Oracle skipped (--no-oracle). Report built from rules only.");
+    expect(markdown).toContain("Swap lodasg for lodash");
+    expect(markdown).toContain("| lodasg@1.0.0 | 28 | swap |");
     expect(markdown).not.toContain("## lucky-charm@1.0.0");
+    expect(markdown).not.toContain("## preact@1.0.0");
   });
 
   it("returns 1 when the target directory does not exist", async () => {

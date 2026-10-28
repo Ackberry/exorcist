@@ -1,0 +1,5 @@
+Exorcist demo fixture. Not the real lodash package, and not published.
+
+The name is one substitution from lodash (h changed to g). The description, README,
+and entry file imitate lodash so the doppelganger rule has an impersonation to
+show Gemma. The scanner does not read this NOTICE file.

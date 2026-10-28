@@ -7,6 +7,7 @@ import {
   buildSuspectExcerpt,
   consult,
   JUDGMENT_SCHEMA,
+  LOOKALIKE_SCHEMA,
   parseJudgment,
   probe,
   README_EXCERPT_CHARS,
@@ -80,6 +81,47 @@ describe("oracle contract", () => {
     expect(user).toContain("poltergeist/high");
     expect(user).toContain("<<<UNTRUSTED CODE>>>");
     expect(user).toContain("<<<END UNTRUSTED CODE>>>");
+    expect(user).toContain("Return JSON only");
+  });
+
+  it("asks a lookalike whether it claims the real package's identity", () => {
+    const request = buildChatRequest({
+      target: { endpoint: "http://localhost:11434", model: "gemma3:4b" },
+      pkg: { ...pkg, name: "lodasg" },
+      findings: [
+        {
+          ...finding("function get(object, key) { return object[key]; }"),
+          rule: "doppelganger",
+          title: "name imitates lodash",
+          detail: "Near miss of lodash (one substitution). Swap lodasg for lodash.",
+          packageName: "lodasg",
+        },
+      ],
+    });
+    expect(request.format).toEqual(LOOKALIKE_SCHEMA);
+    expect(LOOKALIKE_SCHEMA.required).toContain("impersonating");
+    const system = request.messages.find((message) => message.role === "system")?.content ?? "";
+    const user = request.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(system).toContain("impersonating is true");
+    expect(system).toContain("harmless copy is still an impostor");
+    expect(system).not.toContain("color helper");
+    expect(user).toContain("Real package: lodash");
+    expect(user).toContain("Installed name: lodasg");
+    expect(user).toContain("claim to be lodash");
+    expect(user).toContain("<<<UNTRUSTED CODE>>>");
+    expect(user).toContain("function get");
+    expect(
+      parseJudgment(
+        '{"impersonating":true,"verdict":"benign","confidence":0.95,"score":1,"summary":"It copies get and chunk.","explanation":"The description says it is the Lodash library."}',
+        true,
+      ),
+    ).toMatchObject({ impersonating: true, verdict: "benign", score: 1, confidence: 0.95 });
+    expect(() =>
+      parseJudgment(
+        '{"verdict":"benign","confidence":0.95,"score":1,"summary":"A reimplementation.","explanation":"The code is harmless."}',
+        true,
+      ),
+    ).toThrow(/impersonating/);
   });
 
   it("sends the description and README as untrusted data, not as instructions", () => {
@@ -223,6 +265,40 @@ const consultInput = {
 describe("consult over HTTP", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("records the popular package on a lookalike judgment", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        ollamaMessage(
+          modelJudgment({
+            impersonating: true,
+            verdict: "benign",
+            confidence: 0.9,
+            score: 1,
+            summary: "It copies get and chunk.",
+            explanation: "The description says it is the Lodash library.",
+          }),
+        ),
+      ),
+    );
+    const findings = [
+      finding("function get() { return 1; }", {
+        rule: "doppelganger",
+        title: "name imitates lodash",
+        detail: "Near miss of lodash (one substitution). Swap lodasg for lodash.",
+      }),
+    ];
+    const judgment = await consult({
+      ...consultInput,
+      pkg: { ...colorHelper, name: "lodasg" },
+      findings,
+    });
+    expect(judgment.impersonating).toBe(true);
+    expect(judgment.impersonationOf).toBe("lodash");
+    expect(judgment.verdict).toBe("benign");
+    expect(hauntingScore(findings, judgment)).toBe(SEVERITY_WEIGHTS.high);
   });
 
   it("takes the score from the model and will not go under the rule floor", async () => {
