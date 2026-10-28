@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { extname, isAbsolute, join, relative, sep } from "node:path";
+import { readFileInside } from "../safe-read.js";
 import type { Finding, InstalledPackage, Rule, Severity } from "../types.js";
 
 const INSTALL_HOOKS = ["preinstall", "install", "postinstall"] as const;
@@ -108,14 +109,8 @@ export const poltergeistRule: Rule = {
       for (const file of listSourceFiles(pkg.path)) {
         const evidencePath = portableRelative(pkg.path, file);
         if (!evidencePath) continue;
-        let source: string;
-        try {
-          const info = statSync(file);
-          if (!info.isFile() || info.size > POLTERGEIST_LIMITS.maxFileBytes) continue;
-          source = readFileSync(file, "utf8");
-        } catch {
-          continue;
-        }
+        const source = readFileInside(pkg.path, file, POLTERGEIST_LIMITS.maxFileBytes);
+        if (source === null) continue;
         collectSignals(pkg, source, evidencePath, findings, seen);
       }
     }
@@ -213,6 +208,7 @@ function listSourceFiles(root: string): string[] {
     for (const entry of entries) {
       if (found.length >= POLTERGEIST_LIMITS.maxFiles) break;
       if (entry.name.startsWith(".")) continue;
+      if (entry.isSymbolicLink()) continue;
       const full = join(current.dir, entry.name);
       if (entry.isDirectory()) {
         if (SKIP_DIRECTORIES.has(entry.name)) continue;

@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import type { HauntingReport, PackageHaunting, Severity } from "./types.js";
+import { neutralizeMarkers, oneLineUntrusted } from "./untrusted.js";
 import { readOwnVersion } from "./version.js";
 
 export function renderMarkdown(report: HauntingReport): string {
@@ -8,12 +9,12 @@ export function renderMarkdown(report: HauntingReport): string {
   const lines: string[] = [
     "# Exorcist haunting report",
     "",
-    `- Target: \`${report.target}\``,
-    `- Scanned: \`${report.scannedAt}\``,
+    `- Target: \`${showLine(report.target, 1_024)}\``,
+    `- Scanned: \`${showLine(report.scannedAt, 64)}\``,
     `- Installed packages: ${report.packageCount}`,
     `- Haunted: ${haunted}`,
     `- Quiet: ${quiet}`,
-    `- Oracle: ${report.oracle.message}`,
+    `- Oracle: ${showLine(report.oracle.message)}`,
     "",
     "## Packages",
     "",
@@ -52,19 +53,19 @@ export function renderMarkdown(report: HauntingReport): string {
       "",
       `## ${label(haunting.name, haunting.version)}`,
       "",
-      `- Path: ${haunting.path ? `\`${haunting.path}\`` : "_not on disk_"}`,
+      `- Path: ${haunting.path ? `\`${showLine(haunting.path, 1_024)}\`` : "_not on disk_"}`,
       `- Dependency: ${place(haunting.direct, haunting.dev)}`,
       `- Haunting score: **${haunting.hauntingScore}/100**`,
-      `- Exorcism: **${haunting.exorcism}** — ${haunting.exorcismReason}`,
+      `- Exorcism: **${haunting.exorcism}** — ${showLine(haunting.exorcismReason)}`,
       "",
       "### Findings",
       "",
     );
     for (const finding of haunting.findings) {
-      lines.push(`#### ${finding.title}`, "");
+      lines.push(`#### ${showLine(finding.title)}`, "");
       lines.push(`- Rule: ${finding.rule}`);
       lines.push(`- Severity: ${finding.severity}`);
-      lines.push(`- ${finding.detail}`);
+      lines.push(`- ${showLine(finding.detail)}`);
       if (finding.evidence) {
         const where = finding.evidencePath ? ` (\`${finding.evidencePath}\`)` : "";
         lines.push("", `Evidence${where}:`, "", fence(finding.evidence), "");
@@ -82,10 +83,10 @@ export function renderMarkdown(report: HauntingReport): string {
         lines.push(`- Confidence: ${haunting.judgment.confidence.toFixed(2)}`);
       }
       lines.push(`- Model score: ${haunting.judgment.score}`);
-      lines.push(`- Summary: ${haunting.judgment.summary}`);
-      lines.push(`- Explanation: ${haunting.judgment.explanation}`);
+      lines.push(`- Summary: ${showLine(haunting.judgment.summary)}`);
+      lines.push(`- Explanation: ${showLine(haunting.judgment.explanation)}`);
     } else if (haunting.oracleNote) {
-      lines.push(`The oracle could not judge this package: ${haunting.oracleNote}`);
+      lines.push(`The oracle could not judge this package: ${showLine(haunting.oracleNote)}`);
     } else {
       lines.push("Not consulted for this package.");
     }
@@ -115,10 +116,10 @@ export function renderTerminal(report: HauntingReport): string {
     chalk.bold.magenta(`EXORCIST ${version}`),
     chalk.dim("a lockfile, a candle, and a local model"),
     "",
-    `${chalk.dim("target")}    ${report.target}`,
-    `${chalk.dim("scanned")}   ${report.scannedAt}`,
+    `${chalk.dim("target")}    ${showLine(report.target, 1_024)}`,
+    `${chalk.dim("scanned")}   ${showLine(report.scannedAt, 64)}`,
     `${chalk.dim("packages")}  ${report.packageCount} installed · ${report.hauntings.length} haunted · ${report.quiet.length} quiet`,
-    `${chalk.dim("oracle")}    ${paintOracle(report.oracle.available, report.oracle.message)}`,
+    `${chalk.dim("oracle")}    ${paintOracle(report.oracle.available, showLine(report.oracle.message))}`,
     "",
     chalk.dim("  rule           status   findings"),
   ];
@@ -138,7 +139,7 @@ export function renderTerminal(report: HauntingReport): string {
       `  ${scoreBar(haunting.hauntingScore)}  ${paintExorcism(haunting.exorcism)}  ${chalk.dim(place(haunting.direct, haunting.dev))}`,
     );
     for (const finding of haunting.findings) {
-      lines.push(`  ${paintSeverity(finding.severity)}  ${finding.title}`);
+      lines.push(`  ${paintSeverity(finding.severity)}  ${showLine(finding.title)}`);
       const snippet = oneLine(finding.evidence ?? finding.detail);
       const where = finding.evidencePath ? `${finding.evidencePath}: ` : "";
       lines.push(chalk.dim(`             ${where}${snippet}`));
@@ -156,7 +157,9 @@ export function renderTerminal(report: HauntingReport): string {
     } else if (haunting.oracleNote) {
       lines.push(`  ${chalk.dim("oracle")}    ${chalk.yellow(oneLine(haunting.oracleNote, 96))}`);
     }
-    lines.push(chalk.dim(`  exorcism  ${haunting.exorcism} — ${haunting.exorcismReason}`));
+    lines.push(
+      chalk.dim(`  exorcism  ${haunting.exorcism} — ${showLine(haunting.exorcismReason)}`),
+    );
   }
 
   if (report.quiet.length > 0 && report.packageCount <= 15) {
@@ -176,11 +179,11 @@ export function printTerminal(report: HauntingReport): void {
 function impostorLine(judgment: NonNullable<PackageHaunting["judgment"]>): string | null {
   if (judgment.impersonating === undefined || !judgment.impersonationOf) return null;
   const word = judgment.impersonating ? "impostor of" : "not an impostor of";
-  return `${word} ${judgment.impersonationOf} (${judgment.confidence.toFixed(2)})`;
+  return `${word} ${showLine(judgment.impersonationOf)} (${judgment.confidence.toFixed(2)})`;
 }
 
 function label(name: string, version: string): string {
-  return `${name}@${version}`;
+  return `${showLine(name, 214)}@${showLine(version, 64)}`;
 }
 
 function place(direct: boolean, dev: boolean): string {
@@ -188,12 +191,16 @@ function place(direct: boolean, dev: boolean): string {
   return dev ? `${kind}, dev` : kind;
 }
 
+function showLine(value: string, max = 2_000): string {
+  return oneLineUntrusted(value, max).replaceAll("`", "'");
+}
+
 function cell(value: string): string {
-  return value.replaceAll("|", "\\|").replaceAll("\n", " ");
+  return showLine(value).replaceAll("|", "\\|");
 }
 
 function fence(code: string): string {
-  return `\`\`\`\n${code.replaceAll("```", "'''")}\n\`\`\``;
+  return `\`\`\`\n${neutralizeMarkers(code).replaceAll("```", "'''")}\n\`\`\``;
 }
 
 function pad(value: string, width: number): string {
@@ -201,9 +208,7 @@ function pad(value: string, width: number): string {
 }
 
 function oneLine(value: string, max = 88): string {
-  const flat = value.replaceAll(/\s+/g, " ").trim();
-  if (flat.length <= max) return flat;
-  return `${flat.slice(0, max - 1)}…`;
+  return showLine(value, max);
 }
 
 function scoreBar(score: number): string {

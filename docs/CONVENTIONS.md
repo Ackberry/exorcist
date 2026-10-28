@@ -46,8 +46,9 @@ Weights and thresholds live in `src/scorer.ts` (`SEVERITY_WEIGHTS`, `REMOVE_SCOR
 - The model that judges suspects is local Gemma through Ollama. Default `gemma3:4b`. Do not route this through a hosted chat API.
 - The scan is the `haunt` Mastra workflow. `consult` calls the Gemma agent in `src/judge.ts`. Do not give that agent tools: `gemma3:4b` through Ollama returns HTTP 400 `does not support tools`.
 - Parse model output with `parseJudgment`. Do not trust the string without that check. A judgment needs `score` as well as the verdict. The agent still sends Ollama's `format` JSON schema.
-- The chat prompt includes the rule findings, the flagged code, and the stated purpose (name, description, README excerpt). Package text is untrusted data in the user message. Do not move it into the system prompt.
-- A transport error or HTTP 5xx on `/api/chat` retries once. Do not add another retry loop.
+- The chat prompt includes the rule findings, the flagged code, and the stated purpose (name, description, README excerpt). Package text is untrusted data in the user message. Do not move it into the system prompt. Names, paths, and finding lines outside the fence go through `oneLineUntrusted`.
+- A transport error or HTTP 5xx on `/api/chat` retries once. Do not add another retry loop. Do not follow redirects. `probe` and the chat `fetch` set `redirect: "manual"`.
+- Read a package file with `readFileInside` (`src/safe-read.ts`). Read `package-lock.json` with `readOwnedFile`. Do not `readFileSync` a path that came from a lockfile, a manifest, or a package tree. Display package and model text through `src/untrusted.ts`.
 - Keep truncation in `buildSuspectExcerpt`. Raising `SUSPECT_CODE_CHAR_BUDGET`, `DESCRIPTION_EXCERPT_CHARS`, or `README_EXCERPT_CHARS` is a product change; note it in `docs/ARCHITECTURE.md`.
 - Tests pass a fake `OracleClient` into `haunt`. Tests of `consult` stub `fetch`. Do not call the real network from a unit test except the existing closed-port `probe` test.
 

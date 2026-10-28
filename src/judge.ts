@@ -13,6 +13,7 @@ import {
 } from "./oracle.js";
 import { judgeTraceContext } from "./tracing.js";
 import type { OracleJudgment } from "./types.js";
+import { oneLineUntrusted } from "./untrusted.js";
 
 /**
  * gemma3:4b on Ollama 0.40.11 answers
@@ -102,6 +103,13 @@ const oracleFetch: typeof fetch = async (input, init) => {
     await discardBody(attempt.response);
     attempt = await postChatAllowingOneRetry(input, withFormatJson(init));
   }
+  if (attempt.response.status >= 300 && attempt.response.status < 400) {
+    await discardBody(attempt.response);
+    const endpoint = url.replace(/\/api\/chat$/, "");
+    throw new OracleError(
+      `Ollama returned a redirect (${attempt.response.status}) from ${endpoint}/api/chat. Exorcist does not follow redirects.`,
+    );
+  }
   if (!attempt.response.ok) throw await httpError(url, attempt.response, attempt.retried);
   return attempt.response;
 };
@@ -126,6 +134,7 @@ async function tryPostChat(input: FetchInput, init: FetchInit): Promise<PostResu
       ok: true,
       response: await globalThis.fetch(input, {
         ...init,
+        redirect: "manual",
         signal: AbortSignal.timeout(CONSULT_TIMEOUT_MS),
       }),
     };
@@ -169,7 +178,7 @@ function readBody(body: RequestInit["body"]): string | null {
 }
 
 async function httpError(url: string, response: Response, retried: boolean): Promise<OracleError> {
-  const text = (await response.text()).replaceAll(/\s+/g, " ").slice(0, 300);
+  const text = oneLineUntrusted(await response.text(), 300);
   const endpoint = url.replace(/\/api\/chat$/, "");
   const retryNote = retried ? " after one retry" : "";
   return new OracleError(

@@ -1,3 +1,4 @@
+import { symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { haunt } from "../src/haunt.js";
@@ -79,6 +80,7 @@ describe("matchPopularName", () => {
     expect(matchPopularName("express-session")).toBeNull();
     expect(matchPopularName("ab")).toBeNull();
     expect(matchPopularName("ms")).toBeNull();
+    expect(matchPopularName("a".repeat(10_000))).toBeNull();
   });
 
   it("flags separator, homoglyph, scope, and combosquat tricks", () => {
@@ -193,6 +195,63 @@ describe("doppelganger rule", () => {
     expect(findings[0]?.detail).toContain("Swap lodasg for lodash");
     expect(findings[0]?.evidence).toContain("The Lodash library");
     expect(findings[0]?.evidence).toContain("function get");
+  });
+
+  it("does not follow an entry file or directory symlink out of the package", async () => {
+    const created = tempDir();
+    cleanups.push(created.cleanup);
+    const outside = join(created.dir, "outside");
+    const pkgDir = join(created.dir, "lodasg");
+    const linkedRoot = join(created.dir, "linked-lodasg");
+    writeText(join(outside, "index.js"), "eval('SECRET-ENTRY');\n");
+    writeJson(join(pkgDir, "package.json"), {
+      name: "lodasg",
+      version: "1.0.0",
+      description: "The Lodash library",
+      main: "lib/index.js",
+    });
+    symlinkSync(outside, join(pkgDir, "lib"));
+    symlinkSync(join(outside, "index.js"), join(pkgDir, "index.js"));
+    writeJson(join(linkedRoot, "package.json"), {
+      name: "lodasg",
+      version: "1.0.0",
+      description: "The Lodash library",
+      main: "index.js",
+    });
+    writeText(join(linkedRoot, "index.js"), "function get(object, key) { return object[key]; }\n");
+    const linkName = join(created.dir, "via-link");
+    symlinkSync(linkedRoot, linkName);
+
+    const escaped = fixturePackage({
+      name: "lodasg",
+      lockKey: "node_modules/lodasg",
+      path: pkgDir,
+      manifest: {
+        name: "lodasg",
+        version: "1.0.0",
+        description: "The Lodash library",
+        main: "lib/index.js",
+      },
+    });
+    const leaked = await doppelgangerRule.scan(escaped, {
+      rootDir: created.dir,
+      packages: [escaped],
+    });
+    expect(leaked[0]?.evidence ?? "").not.toContain("SECRET-ENTRY");
+
+    const linked = fixturePackage({
+      name: "lodasg",
+      lockKey: "node_modules/lodasg",
+      path: linkName,
+      manifest: {
+        name: "lodasg",
+        version: "1.0.0",
+        description: "The Lodash library",
+        main: "index.js",
+      },
+    });
+    const kept = await doppelgangerRule.scan(linked, { rootDir: created.dir, packages: [linked] });
+    expect(kept[0]?.evidence).toContain("function get");
   });
 
   it("recommends swap and asks Gemma whether the package is impersonating", async () => {

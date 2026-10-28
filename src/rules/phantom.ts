@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { extname, join } from "node:path";
+import { MAX_MANIFEST_BYTES, readFileInside } from "../safe-read.js";
 import type { Finding, InstalledPackage, Rule, ScanContext } from "../types.js";
 
 /**
@@ -91,14 +92,8 @@ function collectUsage(rootDir: string): ProjectUsage {
   };
   readRootManifest(rootDir, usage);
   for (const file of listProjectFiles(rootDir)) {
-    let source: string;
-    try {
-      const info = statSync(file);
-      if (!info.isFile() || info.size > PHANTOM_LIMITS.maxFileBytes) continue;
-      source = readFileSync(file, "utf8");
-    } catch {
-      continue;
-    }
+    const source = readFileInside(rootDir, file, PHANTOM_LIMITS.maxFileBytes);
+    if (source === null) continue;
     try {
       for (const specifier of collectSpecifiers(source)) {
         const name = packageNameFromSpecifier(specifier);
@@ -112,12 +107,8 @@ function collectUsage(rootDir: string): ProjectUsage {
 }
 
 function readRootManifest(rootDir: string, usage: ProjectUsage): void {
-  let text: string;
-  try {
-    text = readFileSync(join(rootDir, "package.json"), "utf8");
-  } catch {
-    return;
-  }
+  const text = readFileInside(rootDir, join(rootDir, "package.json"), MAX_MANIFEST_BYTES);
+  if (text === null) return;
   const stripped = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   let parsed: unknown;
   try {
@@ -169,12 +160,8 @@ function tokenUsesPackage(token: string, name: string): boolean {
 
 function binNames(pkg: InstalledPackage): string[] {
   if (!pkg.path) return [];
-  let text: string;
-  try {
-    text = readFileSync(join(pkg.path, "package.json"), "utf8");
-  } catch {
-    return [];
-  }
+  const text = readFileInside(pkg.path, join(pkg.path, "package.json"), MAX_MANIFEST_BYTES);
+  if (text === null) return [];
   const stripped = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   try {
     const parsed = JSON.parse(stripped) as unknown;
@@ -551,6 +538,7 @@ function listProjectFiles(root: string): string[] {
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
       if (found.length >= PHANTOM_LIMITS.maxFiles) break;
+      if (entry.isSymbolicLink()) continue;
       const full = join(current.dir, entry.name);
       if (entry.isDirectory()) {
         if (entry.name.startsWith(".") || SKIP_DIRECTORIES.has(entry.name)) continue;

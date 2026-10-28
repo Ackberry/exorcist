@@ -1,6 +1,7 @@
 import { normalizeEndpoint } from "./endpoint.js";
 import { CliError } from "./errors.js";
 import { DEFAULT_ENDPOINT, DEFAULT_MODEL } from "./oracle.js";
+import { hasControlChar } from "./untrusted.js";
 
 export interface CliOptions {
   help: boolean;
@@ -66,6 +67,7 @@ export function parseArgs(
   }
 
   if (model.trim() === "") throw new CliError("Model name is empty.");
+  if (hasControlChar(model)) throw new CliError("Model name contains control characters.");
   return { help, targetPath, model, endpoint, consultOracle, reportPath };
 }
 

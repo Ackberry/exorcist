@@ -1,3 +1,4 @@
+import { symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { POLTERGEIST_LIMITS, poltergeistRule } from "../src/rules/poltergeist.js";
@@ -175,5 +176,24 @@ describe("poltergeist", () => {
     const found = Array.isArray(findings) ? findings : [];
     expect(titles(found)).toEqual(["contains a base64 payload"]);
     expect(found[0]?.severity).toBe("medium");
+  });
+
+  it("does not follow a source symlink out of the package", () => {
+    const created = tempDir();
+    cleanups.push(created.cleanup);
+    const dir = join(created.dir, "pkg");
+    const outside = join(created.dir, "outside.js");
+    writeJson(join(dir, "package.json"), { name: "linked", version: "1.0.0" });
+    writeText(outside, 'eval("SECRET-EVAL");\n');
+    symlinkSync(outside, join(dir, "index.js"));
+    const nest = join(created.dir, "nested");
+    writeText(join(nest, "index.js"), 'eval("SECRET-DIR");\n');
+    symlinkSync(nest, join(dir, "lib"));
+
+    const findings = poltergeistRule.scan(
+      fixturePackage({ name: "linked", lockKey: "node_modules/linked", path: dir }),
+      { rootDir: created.dir, packages: [] },
+    );
+    expect(findings).toEqual([]);
   });
 });
