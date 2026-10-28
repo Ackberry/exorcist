@@ -1,7 +1,17 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ResolverError } from "./errors.js";
+import {
+  acceptPackageDir,
+  containedJoin,
+  MAX_LOCKFILE_BYTES,
+  MAX_MANIFEST_BYTES,
+  type PackageScope,
+  packageScope,
+  readFileInside,
+  readOwnedFile,
+} from "./safe-read.js";
 import type { InstalledPackage, PackageManifest } from "./types.js";
 
 interface LockPackage {
@@ -25,6 +35,9 @@ interface LockPackage {
  *
  * When `node_modules` is missing, a `link: true` or `file:` spec is still
  * resolved so local fixtures can be read straight from the lockfile.
+ * The real path has to stay inside the package boundary from `packageScope`.
+ * A key that contains `..` is not a directory. Credential directories are not
+ * package roots. See `src/safe-read.ts`.
  */
 export function resolveInstalled(rootDir: string): InstalledPackage[] {
   const root = resolve(rootDir);
@@ -39,7 +52,7 @@ export function resolveInstalled(rootDir: string): InstalledPackage[] {
     );
   }
 
-  const parsed = readJsonFile(lockPath);
+  const parsed = readJsonFile(root, lockPath);
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new ResolverError(`${lockPath} is not a JSON object.`);
   }
@@ -59,6 +72,7 @@ export function resolveInstalled(rootDir: string): InstalledPackage[] {
     );
   }
 
+  const scope = packageScope(root);
   const rootEntry = packages[""] ?? {};
   const directNames = new Set<string>([
     ...Object.keys(rootEntry.dependencies ?? {}),
@@ -76,7 +90,7 @@ export function resolveInstalled(rootDir: string): InstalledPackage[] {
 
     const target = lookupTarget(packages, entry.resolved);
     const keyName = nameFromKey(key);
-    const directory = chooseDirectory(root, key, entry.resolved);
+    const directory = chooseDirectory(root, scope, key, entry.resolved);
     const manifest = readManifest(directory);
     const name = entry.name ?? target?.name ?? manifest?.name ?? keyName;
     const pkgVersion = entry.version ?? target?.version ?? manifest?.version;
@@ -100,14 +114,20 @@ export function resolveInstalled(rootDir: string): InstalledPackage[] {
   return installed;
 }
 
-function readJsonFile(file: string): unknown {
-  let text: string;
-  try {
-    text = readFileSync(file, "utf8");
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new ResolverError(`Could not read ${file}: ${reason}`);
+function readJsonFile(root: string, file: string): unknown {
+  const read = readOwnedFile(root, file, MAX_LOCKFILE_BYTES);
+  if (!read.ok) {
+    if (read.reason === "outside") {
+      throw new ResolverError(
+        `${file} points outside ${root}. Exorcist will not follow that path.`,
+      );
+    }
+    if (read.reason === "large") {
+      throw new ResolverError(`${file} is larger than ${MAX_LOCKFILE_BYTES} bytes.`);
+    }
+    throw new ResolverError(`Could not read ${file}.`);
   }
+  const text = read.text;
   const stripped = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   try {
     return JSON.parse(stripped) as unknown;
@@ -118,7 +138,7 @@ function readJsonFile(file: string): unknown {
 
 function asLockMap(value: unknown): Record<string, LockPackage> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const map: Record<string, LockPackage> = {};
+  const map: Record<string, LockPackage> = Object.create(null) as Record<string, LockPackage>;
   for (const [key, entry] of Object.entries(value)) {
     const parsed = asLockPackage(entry);
     if (parsed) map[key] = parsed;
@@ -147,7 +167,7 @@ function asString(value: unknown): string | undefined {
 
 function asStringRecord(value: unknown): Record<string, string> | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  const record: Record<string, string> = {};
+  const record: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const [key, entry] of Object.entries(value)) {
     if (typeof entry === "string") record[key] = entry;
   }
@@ -188,21 +208,18 @@ function lookupTarget(
 
 function chooseDirectory(
   rootDir: string,
+  scope: PackageScope,
   key: string,
   resolved: string | undefined,
 ): string | null {
-  const installedDir = resolve(rootDir, key);
-  const linkedDir = linkedDirectory(rootDir, resolved);
-  return (
-    directoryWithManifest(installedDir) ??
-    directoryWithManifest(linkedDir) ??
-    (existsSync(installedDir) ? installedDir : linkedDir)
-  );
-}
-
-function directoryWithManifest(dir: string | null): string | null {
-  if (!dir) return null;
-  return existsSync(join(dir, "package.json")) ? dir : null;
+  const candidates = [containedJoin(rootDir, key), linkedDirectory(rootDir, resolved)];
+  let fallback: string | null = null;
+  for (const dir of candidates) {
+    if (dir === null || !acceptPackageDir(scope, dir)) continue;
+    if (fallback === null) fallback = dir;
+    if (existsSync(join(dir, "package.json"))) return dir;
+  }
+  return fallback;
 }
 
 function linkedDirectory(rootDir: string, resolved: string | undefined): string | null {
@@ -232,14 +249,8 @@ function resolveLink(rootDir: string, resolved: string): string {
 
 function readManifest(dir: string | null): PackageManifest | null {
   if (!dir) return null;
-  const file = join(dir, "package.json");
-  if (!existsSync(file)) return null;
-  let text: string;
-  try {
-    text = readFileSync(file, "utf8");
-  } catch {
-    return null;
-  }
+  const text = readFileInside(dir, join(dir, "package.json"), MAX_MANIFEST_BYTES);
+  if (text === null) return null;
   const stripped = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   try {
     return asManifest(JSON.parse(stripped) as unknown);

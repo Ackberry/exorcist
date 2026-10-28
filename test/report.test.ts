@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderMarkdown } from "../src/report.js";
+import { renderMarkdown, renderTerminal } from "../src/report.js";
 import type { HauntingReport } from "../src/types.js";
 
 const report: HauntingReport = {
@@ -89,5 +89,43 @@ describe("renderMarkdown", () => {
     expect(markdown).toContain("It encodes a dummy token during install.");
     expect(markdown).toContain("node postinstall.js");
     expect(markdown).toContain("does not execute");
+  });
+
+  it("strips terminal controls and extra headings from package text", () => {
+    const haunting = report.hauntings[0];
+    const finding = haunting?.findings[0];
+    const judgment = haunting?.judgment;
+    if (!haunting || !finding || !judgment) throw new Error("fixture");
+    const hostile: HauntingReport = {
+      ...report,
+      hauntings: [
+        {
+          ...haunting,
+          name: "soul-snatcher\n## pwned\u001B[2J\u202E",
+          version: "1.0.0",
+          findings: [
+            {
+              ...finding,
+              title: "runs a postinstall\u001B[2J",
+              evidence: "node postinstall.js\u001B[2J\u202E",
+            },
+          ],
+          judgment: {
+            ...judgment,
+            summary: "It encodes a token.\u001B[2J",
+            explanation: "No socket.\u202E",
+          },
+        },
+      ],
+    };
+    const markdown = renderMarkdown(hostile);
+    const terminal = renderTerminal(hostile);
+    expect(markdown).toContain("## soul-snatcher ## pwned@1.0.0");
+    expect(markdown).not.toMatch(/^## pwned/m);
+    expect(markdown).not.toContain("\u001B");
+    expect(markdown).not.toContain("\u202E");
+    expect(markdown).toContain("node postinstall.js");
+    expect(terminal).not.toContain("\u001B[2J");
+    expect(terminal).not.toContain("\u202E");
   });
 });

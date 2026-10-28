@@ -36,5 +36,7 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["--wat"])).toThrow(CliError);
     expect(() => parseArgs(["--model"])).toThrow(/Missing value/);
     expect(() => parseArgs(["one", "two"])).toThrow(/Unexpected argument/);
+    expect(() => parseArgs(["--endpoint", "http://user:pass@evil.test"])).toThrow(/username/);
+    expect(() => parseArgs(["--model", "gemma3:4b\n"])).toThrow(/control characters/);
   });
 });

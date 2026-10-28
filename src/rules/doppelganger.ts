@@ -1,5 +1,5 @@
-import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
+import { readFileInside } from "../safe-read.js";
 import type { InstalledPackage, Rule, Severity } from "../types.js";
 import { POPULAR_PACKAGES } from "./popular-packages.js";
 
@@ -8,6 +8,8 @@ export { POPULAR_PACKAGES } from "./popular-packages.js";
 /** Name length and excerpt caps. Distance 2 is only for names of length 8 or more. */
 export const DOPPELGANGER_LIMITS = {
   minNameLength: 4,
+  /** npm's maximum package name length. Longer names skip edit distance. */
+  maxNameLength: 214,
   twoEditMinLength: 8,
   descriptionChars: 300,
   codeChars: 800,
@@ -105,7 +107,12 @@ export function matchPopularName(
   popular: readonly string[] = POPULAR_PACKAGES,
 ): PopularMatch | null {
   const raw = name.trim().toLowerCase();
-  if (raw.length < DOPPELGANGER_LIMITS.minNameLength) return null;
+  if (
+    raw.length < DOPPELGANGER_LIMITS.minNameLength ||
+    raw.length > DOPPELGANGER_LIMITS.maxNameLength
+  ) {
+    return null;
+  }
   const corpus = corpusFor(popular);
   if (corpus.exact.has(raw)) return null;
 
@@ -251,7 +258,9 @@ function corpusFor(popular: readonly string[]): Corpus {
   const targets: TargetRow[] = [];
   for (const entry of popular) {
     const name = entry.trim().toLowerCase();
-    if (name === "" || exact.has(name)) continue;
+    if (name === "" || name.length > DOPPELGANGER_LIMITS.maxNameLength || exact.has(name)) {
+      continue;
+    }
     exact.add(name);
     const parsed = parseName(name);
     if (parsed.base.length < DOPPELGANGER_LIMITS.minNameLength) continue;
@@ -295,18 +304,11 @@ function readEntry(root: string, main: string | undefined): { file: string; text
     const portable = rel.replaceAll("\\", "/");
     const full = resolve(root, portable);
     if (relative(root, full).startsWith("..") || isAbsolute(relative(root, full))) continue;
-    try {
-      const info = statSync(full);
-      if (!info.isFile() || info.size === 0 || info.size > DOPPELGANGER_LIMITS.maxCodeBytes)
-        continue;
-      const text = readFileSync(full, "utf8")
-        .replace(/^\uFEFF/, "")
-        .trim();
-      if (text === "" || text.includes("\0")) continue;
-      return { file: portable, text: clip(text, DOPPELGANGER_LIMITS.codeChars) };
-    } catch {
-      // The entry file is missing or unreadable.
-    }
+    const raw = readFileInside(root, full, DOPPELGANGER_LIMITS.maxCodeBytes);
+    if (raw === null) continue;
+    const text = raw.replace(/^\uFEFF/, "").trim();
+    if (text === "" || text.includes("\0")) continue;
+    return { file: portable, text: clip(text, DOPPELGANGER_LIMITS.codeChars) };
   }
   return null;
 }

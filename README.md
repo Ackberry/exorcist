@@ -6,6 +6,8 @@ It is a small scanner for the DEV Hacktoberfest Open-Source AI Challenge, "Ghost
 
 The code it reads may be private. The model runs on your machine, the scan works with the network unplugged, and nothing here calls a cloud LLM API.
 
+A scan does not follow a symlink out of a package, a lockfile path into a credential directory, or a redirect from Ollama. A `file:` dependency is read only when its real path stays inside the git repository that contains the project. If the project is not in a git checkout, that path has to stay inside the parent of the scanned directory, and that parent is never your home directory. `--endpoint` is the Ollama origin. A username, a password, or a redirect is refused.
+
 ## Quickstart
 
 Node.js 22.13 or newer.
@@ -88,7 +90,7 @@ Exit code `0` means the scan finished, even if packages are haunted. Exit code `
 
 Inside this repository, run `npx tsx src/cli.ts` or `node dist/cli.js`. `package.json` has a `bin` entry named `exorcist`, so `npx exorcist` works **after this package is installed** (`npm install -g .` from a clone, or as a dependency of another project). Running `npx exorcist` here, before that, asks the npm registry for a different package named `exorcist`.
 
-Point `--endpoint` at a machine you trust. The default is your local Ollama. A remote endpoint would send flagged source there.
+Point `--endpoint` at a machine you trust. The default is your local Ollama. The flag is parsed as an origin, and Exorcist does not follow a redirect from that host. A remote endpoint would send flagged source there.
 
 ## Demo fixtures
 
