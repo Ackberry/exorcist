@@ -1,3 +1,5 @@
+import type { Packument } from "./registry.js";
+
 /** Ghost kinds. One rule module implements each. */
 export type GhostKind = "poltergeist" | "doppelganger" | "revenant" | "phantom";
 
@@ -32,6 +34,8 @@ export interface InstalledPackage {
   /** True when this top-level package is listed in the root package's dependencies. */
   direct: boolean;
   dev: boolean;
+  /** A `file:` or linked package. It has no identity on the npm registry. */
+  linked: boolean;
 }
 
 export interface Finding {
@@ -50,6 +54,11 @@ export interface Finding {
 export interface ScanContext {
   rootDir: string;
   packages: readonly InstalledPackage[];
+  /**
+   * Registry documents fetched once before the rules run. Absent when no client
+   * was supplied; a null value means the registry was asked and had no answer.
+   */
+  registry?: ReadonlyMap<string, Packument | null>;
 }
 
 export interface Rule {
@@ -129,4 +138,6 @@ export interface HauntingReport {
   hauntings: readonly PackageHaunting[];
   quiet: readonly QuietPackage[];
   oracle: OracleStatus;
+  /** One line when the registry could not be read in full. Null when it could. */
+  registryNote: string | null;
 }

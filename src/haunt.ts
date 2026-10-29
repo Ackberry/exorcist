@@ -1,4 +1,5 @@
 import { type OracleClient, ollamaClient } from "./oracle.js";
+import { npmRegistryClient, type RegistryClient } from "./registry.js";
 import type { HauntingReport } from "./types.js";
 import { runHauntWorkflow } from "./workflow.js";
 
@@ -9,6 +10,8 @@ export interface HauntOptions {
   consultOracle: boolean;
   /** Test seam. Defaults to the local Ollama client. */
   oracleClient?: OracleClient;
+  /** Test seam. Defaults to the public npm registry. */
+  registryClient?: RegistryClient;
 }
 
 /**
@@ -24,5 +27,6 @@ export async function haunt(targetPath: string, options: HauntOptions): Promise<
       consultOracle: options.consultOracle,
     },
     options.oracleClient ?? ollamaClient,
+    options.registryClient ?? npmRegistryClient,
   );
 }

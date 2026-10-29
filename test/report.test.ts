@@ -3,6 +3,7 @@ import { renderMarkdown, renderTerminal } from "../src/report.js";
 import type { HauntingReport } from "../src/types.js";
 
 const report: HauntingReport = {
+  registryNote: null,
   target: "/work/demo/victim",
   scannedAt: "2026-10-27T00:00:00.000Z",
   packageCount: 2,

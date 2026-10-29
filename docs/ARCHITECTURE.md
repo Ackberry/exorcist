@@ -46,7 +46,8 @@ Calls to the model are sequential, one per haunted package, so a laptop-sized Ol
 | `src/resolver.ts`           | Lockfile v2/v3 to `InstalledPackage[]`.                                                         |
 | `src/rules/poltergeist.ts`  | Install scripts and risky APIs inside installed packages.                                       |
 | `src/rules/doppelganger.ts` | Typosquat and impersonation names against `POPULAR_PACKAGES`.                                  |
-| `src/rules/revenant.ts`     | Stub. Registry lookup is not implemented.                                                       |
+| `src/rules/revenant.ts`     | Release after a long silence, or a new maintainer on the installed version.                     |
+| `src/registry.ts`           | npm registry client, the candidate filter, and the one prefetch before the rules run.           |
 | `src/rules/phantom.ts`      | Direct dependency the project never imports or names in a script.                               |
 | `src/rules/index.ts`        | `rules` array, in the order findings are collected.                                             |
 | `src/scanner.ts`            | Runs every rule. One rule throwing fails the scan, with the rule name and package in the error. |

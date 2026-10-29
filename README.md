@@ -2,9 +2,9 @@
 
 Exorcist scans an npm project's **installed** dependencies for malicious or risky packages. Cheap rules flag suspects. Only those suspects are shown to **Gemma**, running locally through **Ollama**. A **Mastra** workflow runs the scan. Its judge is a Mastra agent with structured output and no tools, because `gemma3:4b` on Ollama does not support tool calls. Gemma reads the flagged code against the package's stated purpose and returns a risk score plus a verdict: benign, suspicious, or malicious. The score cannot go below the total from the rules.
 
-It is a small scanner for the DEV Hacktoberfest Open-Source AI Challenge, "Ghost in the Machine" (deadline Sat Oct 31, 2026). Poltergeist, doppelganger, and phantom are the rules that flag packages today.
+It is a small scanner for the DEV Hacktoberfest Open-Source AI Challenge, "Ghost in the Machine" (deadline Sat Oct 31, 2026). Poltergeist, doppelganger, phantom, and revenant all flag packages today.
 
-The code it reads may be private. The model runs on your machine, the scan works with the network unplugged, and nothing here calls a cloud LLM API.
+The code it reads may be private. The model runs on your machine, the scan works with the network unplugged, and nothing here calls a cloud LLM API. Revenant asks the public npm registry for publish dates; with no network it finds nothing and the scan carries on.
 
 A scan does not follow a symlink out of a package, a lockfile path into a credential directory, or a redirect from Ollama. A `file:` dependency is read only when its real path stays inside the git repository that contains the project. If the project is not in a git checkout, that path has to stay inside the parent of the scanned directory, and that parent is never your home directory. `--endpoint` is the Ollama origin. A username, a password, or a redirect is refused.
 
@@ -108,7 +108,7 @@ If you skip `npm install` in `demo/victim`, the committed lockfile still points 
 ## How a scan runs
 
 1. Read `package-lock.json` and list installed packages (name, version, path, `package.json`).
-2. Run every rule. **Poltergeist** flags risky install scripts and APIs. **Doppelganger** flags a name that imitates a popular package. **Phantom** flags a direct dependency the project never imports or names in a script. Revenant returns no findings.
+2. Run every rule. **Poltergeist** flags risky install scripts and APIs. **Doppelganger** flags a name that imitates a popular package. **Phantom** flags a direct dependency the project never imports or names in a script. **Revenant** flags a release that landed after a long silence, or under a maintainer the previous release did not have. Revenant is the one rule that reads the npm registry; every other rule works from the files on disk.
 3. If Ollama is up and the model is pulled, the Mastra judge asks Gemma about each haunted package: the flagged code, and the stated purpose (name, description, and a README excerpt when a README is present). Package text is treated as data, not as instructions. The request is Ollama's JSON schema on `/api/chat`, not a tool call. A doppelganger hit uses a separate question: does this package claim the real package's identity under a different name? Gemma returns `impersonating` true or false. A harmless copy that says it is lodash is an impostor. The report shows that, for example `impostor of lodash (0.90)`, and the score still cannot fall below the rule total. A dropped connection or an HTTP 500 is retried once.
 4. The reported score is Gemma's score, or the rule total when that total is higher. With `--no-oracle`, or when the call fails, the score is the rule total only. Pick an exorcism: `pin`, `remove`, or `swap`.
 5. Print the terminal report and write `haunting-report.md`.

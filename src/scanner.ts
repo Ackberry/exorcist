@@ -1,12 +1,14 @@
 import { errorMessage } from "./errors.js";
+import type { Packument } from "./registry.js";
 import { rules } from "./rules/index.js";
 import type { Finding, InstalledPackage, RuleRun, ScanContext } from "./types.js";
 
 export async function runRules(
   packages: readonly InstalledPackage[],
   rootDir: string,
+  registry?: ReadonlyMap<string, Packument | null>,
 ): Promise<Finding[]> {
-  const ctx: ScanContext = { rootDir, packages };
+  const ctx: ScanContext = registry ? { rootDir, packages, registry } : { rootDir, packages };
   const findings: Finding[] = [];
 
   for (const rule of rules) {

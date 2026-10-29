@@ -8,6 +8,12 @@ export {
   ollamaClient,
   parseJudgment,
 } from "./oracle.js";
+export {
+  npmRegistryClient,
+  type Packument,
+  prefetchPackuments,
+  type RegistryClient,
+} from "./registry.js";
 export { renderMarkdown } from "./report.js";
 export { resolveInstalled } from "./resolver.js";
 export { rules } from "./rules/index.js";
