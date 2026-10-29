@@ -1,6 +1,6 @@
 # Status
 
-Updated 2026-10-28. The Day 1 skeleton is in place, phantom and doppelganger are active, and Gemma sets the haunting score above a rule floor. If you change behavior, update this file in the same commit so it still describes the code.
+Updated 2026-10-28. All four rules are active, and Gemma sets the haunting score above a rule floor. If you change behavior, update this file in the same commit so it still describes the code.
 
 ## Done
 
@@ -15,15 +15,15 @@ Updated 2026-10-28. The Day 1 skeleton is in place, phantom and doppelganger are
 - `npm run build` marks `dist/cli.js` executable with Node's `chmodSync` (`scripts/mark-executable.js`), so the build does not call the shell `chmod` command. The CLI sets `process.exitCode` and does not call `process.exit()`. Exit codes are unchanged: 0 when the scan finished, 1 when it could not run.
 - Hostile-package boundary (`src/safe-read.ts`, `src/untrusted.ts`). A dependency is read only when its real path stays inside the git repository that contains the scan, or inside the parent of the scan root when there is no `.git` (that parent is never `/` or the home directory). The package must not be an ancestor of the project and must not be a credential path (`.ssh`, `.aws`, `.npm`, `.gnupg`, `.docker`, `.kube`, `.azure`, `~/.config/gh`, `~/.config/gcloud`, `.npmrc`, `.netrc`, `.git-credentials`, `.pypirc`, `/etc`, the home directory, or `/`). Lockfile keys that contain `..` are not directories. Symlinks inside a package are not followed. `package-lock.json` over 32 MiB is rejected. A `package.json` over 1 MiB, or a `package.json` symlink, is ignored. The Ollama endpoint is parsed as an origin: userinfo is rejected and redirects are not followed. Package names, evidence, and model text are stripped of ANSI, C0 controls, and bidi overrides before they reach the terminal, the Markdown report, or an unfenced prompt line. Doppelganger skips names longer than 214 characters.
 - `demo/victim` with three possessed fixtures and two quiet controls, installed from `file:` paths. `src/app.js` imports `lucky-charm`, `lodasg`, and `preact`. `npm test` covers the resolver, poltergeist, phantom, doppelganger (including a mocked Ollama swap), the oracle's parser, request, model score, and one Ollama retry, the scorer's rule floor, the revenant stub, the pipeline with a fake client, the demo, the hostile-package boundary (`test/safe-read.test.ts`), and that Sentry tracing does nothing when `SENTRY_DSN` is unset.
+- Revenant rule (`src/rules/revenant.ts`, `status` `"active"`). Two signals, both `medium`: the installed version landed at least `SILENCE_DAYS` (365) after the release before it, or it carries a maintainer that previous release did not have. Both together total 32, well under `REMOVE_SCORE`. The finding's evidence is a publish timeline, not code, and `evidencePath` is null. The exorcism is `pin`, and it names the release *before* the break rather than the installed version. Registry text is untrusted and goes through `oneLineUntrusted`.
+- npm registry client (`src/registry.ts`). `prefetchPackuments` runs once in the `rules` workflow step, before the rule loop, so revenant's `scan` is synchronous and cannot throw. Candidates skip `file:` and linked packages, so `demo/victim` makes zero requests and the demo stays offline. 8 requests in flight, 10s per request, a 60s budget for the whole prefetch, 8 MiB per packument, one retry on 5xx, and a 3-strike circuit breaker that ends the prefetch when nothing has succeeded. 404 means not on the registry and is not retried. Redirects are not followed. The full packument is required: the abbreviated one (`application/vnd.npm.install-v1+json`) carries neither `time` nor `maintainers`. Failures become `HauntingReport.registryNote`, one line for the whole scan, not an exception.
 - GitHub Actions CI (`.github/workflows/ci.yml`) on every push to `main` and every pull request. One job per cell of ubuntu-latest and windows-latest times Node 22.13 and 24: `npm ci`, `npm run lint`, `npm test`, `npm run build`, then `node dist/cli.js demo/victim --no-oracle`. Windows is in the matrix because `scripts/mark-executable.js` replaces the shell `chmod`. The runner has no Ollama and no `SENTRY_DSN`, so CI exercises the rules-only path. A separate `audit` job runs `npm audit --audit-level=high` against the lockfile, so a scanner of other projects' dependencies does not ship a known-vulnerable one of its own. A moderate or low advisory does not fail that job.
 
 ## Stubbed
 
-| Rule     | File                    | What it does today                          |
-| -------- | ----------------------- | ------------------------------------------- |
-| revenant | `src/rules/revenant.ts` | Returns `[]`. No registry request is made. |
+Nothing. All four rules are active.
 
-`test/demo.test.ts` expects poltergeist and phantom on `soul-snatcher` and `hexed-helper`, doppelganger on `lodasg`, and no findings on `lucky-charm` or `preact`. Update that test when revenant starts flagging fixtures.
+`test/demo.test.ts` expects poltergeist and phantom on `soul-snatcher` and `hexed-helper`, doppelganger on `lodasg`, and no findings on `lucky-charm` or `preact`. Revenant adds no rows there: every fixture is a `file:` link, so none of them is a registry candidate.
 
 ## Not built
 
@@ -47,15 +47,13 @@ Updated 2026-10-28. The Day 1 skeleton is in place, phantom and doppelganger are
 - Oracle calls are sequential. Suspect code sent to the model is capped at 6,000 characters. The description excerpt is 500 characters. The README excerpt is 1,500 characters, and a README over 512 KiB is skipped.
 - Doppelganger does not flag an exact popular name, a name shorter than 4 characters, or a name longer than 214 characters. Two edits require both names to be at least 8 characters. Combosquat uses a fixed affix list (`utils`, `js`, `node`, and the rest named in `docs/ARCHITECTURE.md`), so `express-session` is not a hit. `@types/lodash` is not a hit. The entry-file excerpt is 800 characters. A `main` path that leaves the package directory is not read. A live `gemma3:4b` run is not recorded here; the lookalike schema is covered with a mocked Ollama response.
 - Gemma cannot score a package below `ruleFloor`. A judgment that fails validation, including one with no `score`, leaves that package on the floor.
+- Revenant reads only the two releases either side of the installed version. An older handover, or one on a branch the project does not install, is not reported. A version missing from the packument `versions` map, or the oldest release in it, produces nothing. `SILENCE_DAYS` is a flat 365 and does not scale with how often the package normally ships. A scan of this repository's own 346 packages produced 74 revenant findings, all at `pin`.
+- The registry prefetch is the only third-party request a scan makes. It is not cached between runs.
 - `--endpoint` can be pointed at another machine you trust. The value is parsed as an origin: a path, query, hash, or `user:password@` is not used, and a redirect is not followed. The default is local. Do not send private source to a host you do not trust.
 - A `file:` dependency outside the git repository is not read. Without a `.git` directory above the project, only the parent of the scan root is allowed, and that parent is never the home directory or `/`. Credential directories listed above are never package roots. A symlink inside a package is not read, including one that stays inside the package. npm's link from `node_modules/<name>` to a `file:` package is still read when that package's real path is inside the boundary.
 - The scanner does not execute package code. `npm install` in `demo/victim` does run `soul-snatcher`'s postinstall, because npm does that. The script only prints a length.
 
 ## Next
-
-Wednesday — the rule still stubbed:
-
-1. **Revenant.** Optional `GET https://registry.npmjs.org/<name>`. Use the `time` map and maintainers. Flag a long gap then a new release, or a maintainer change on the installed version. On any network failure, return `[]` for that package and let the scan continue. The default path must stay usable offline. Do not call the registry from unit tests; inject a fetch or a fixture. The demo packages are not on the registry; they should not become hard failures.
 
 Thursday — oracle, report, and a single-package command:
 

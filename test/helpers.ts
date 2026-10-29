@@ -32,6 +32,7 @@ export function fixturePackage(
     manifest: null,
     direct: true,
     dev: false,
+    linked: false,
     ...overrides,
   };
 }

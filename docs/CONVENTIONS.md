@@ -30,7 +30,7 @@ The four kinds already exist on `GhostKind`. You should not need a new kind for 
 1. Implement `scan` in `src/rules/<kind>.ts`. It is already listed in `src/rules/index.ts`.
 2. Return `Finding[]`. Use the package's `lockKey`, `name`, and `version` on every finding. Put a short snippet in `evidence` and a path relative to the package (forward slashes) in `evidencePath`.
 3. Set `status` to `"active"` when it can flag a real package. Until then leave it `"stub"` and return `[]`.
-4. Catch network and IO problems inside the rule and return `[]` (or findings collected so far) so one bad package does not abort the scan. `revenant` must do this when the registry is unreachable.
+4. Catch network and IO problems inside the rule and return `[]` (or findings collected so far) so one bad package does not abort the scan. Revenant never fetches from `scan`: `prefetchPackuments` in `src/registry.ts` does the IO before the rule loop and swallows its own failures, so `scan` reads a map and cannot throw.
 5. Add a unit test that builds a temp package or a temp lockfile with `test/helpers.ts`. Do not commit `node_modules`.
 6. If the demo should trip the rule, change the fixture and update `test/demo.test.ts`. That test names which rules flag which demo fixtures. `lucky-charm` and `preact` are quiet. `lodasg` is imported, so phantom does not flag it; doppelganger does. `soul-snatcher` and `hexed-helper` are unused, so phantom flags them.
 7. Update `docs/STATUS.md` and `docs/ARCHITECTURE.md` so they describe the new behavior, including any new threshold.
@@ -50,7 +50,7 @@ Weights and thresholds live in `src/scorer.ts` (`SEVERITY_WEIGHTS`, `REMOVE_SCOR
 - A transport error or HTTP 5xx on `/api/chat` retries once. Do not add another retry loop. Do not follow redirects. `probe` and the chat `fetch` set `redirect: "manual"`.
 - Read a package file with `readFileInside` (`src/safe-read.ts`). Read `package-lock.json` with `readOwnedFile`. Do not `readFileSync` a path that came from a lockfile, a manifest, or a package tree. Display package and model text through `src/untrusted.ts`.
 - Keep truncation in `buildSuspectExcerpt`. Raising `SUSPECT_CODE_CHAR_BUDGET`, `DESCRIPTION_EXCERPT_CHARS`, or `README_EXCERPT_CHARS` is a product change; note it in `docs/ARCHITECTURE.md`.
-- Tests pass a fake `OracleClient` into `haunt`. Tests of `consult` stub `fetch`. Do not call the real network from a unit test except the existing closed-port `probe` test.
+- Tests pass a fake `OracleClient` into `haunt`. Tests of `consult` stub `fetch`. Do not call the real network from a unit test except the existing closed-port `probe` test. Registry tests pass a fake `RegistryClient` the same way; nothing in the suite reaches registry.npmjs.org.
 
 ## Testing
 

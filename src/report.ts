@@ -15,6 +15,7 @@ export function renderMarkdown(report: HauntingReport): string {
     `- Haunted: ${haunted}`,
     `- Quiet: ${quiet}`,
     `- Oracle: ${showLine(report.oracle.message)}`,
+    ...(report.registryNote ? [`- Registry: ${showLine(report.registryNote)}`] : []),
     "",
     "## Packages",
     "",
@@ -120,6 +121,9 @@ export function renderTerminal(report: HauntingReport): string {
     `${chalk.dim("scanned")}   ${showLine(report.scannedAt, 64)}`,
     `${chalk.dim("packages")}  ${report.packageCount} installed · ${report.hauntings.length} haunted · ${report.quiet.length} quiet`,
     `${chalk.dim("oracle")}    ${paintOracle(report.oracle.available, showLine(report.oracle.message))}`,
+    ...(report.registryNote
+      ? [`${chalk.dim("registry")}  ${chalk.yellow(showLine(report.registryNote, 96))}`]
+      : []),
     "",
     chalk.dim("  rule           status   findings"),
   ];

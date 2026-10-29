@@ -16,6 +16,7 @@ const pkg: InstalledPackage = {
   manifest: null,
   direct: true,
   dev: false,
+  linked: false,
 };
 
 function finding(overrides: Partial<Finding> = {}): Finding {

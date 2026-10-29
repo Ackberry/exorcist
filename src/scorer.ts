@@ -1,4 +1,5 @@
 import { readNearMiss } from "./rules/doppelganger.js";
+import { readPriorVersion } from "./rules/revenant.js";
 import type {
   Exorcism,
   Finding,
@@ -103,6 +104,16 @@ function exorcismFor(
       exorcismReason: `Haunting score ${score}/100. ${pkg.name} is installed but never imported. Remove it. Strongest signal: ${top.title}.`,
     };
   }
+  // History, not code: the useful action is to go back to the release before
+  // the silence or the handover, not to pin the version already installed.
+  const priorVersion = revenantPriorVersion(findings);
+  if (priorVersion) {
+    return {
+      exorcism: "pin",
+      exorcismReason: `Haunting score ${score}/100. Pin ${pkg.name}@${priorVersion}, the release before the break, and read the changes since. Strongest signal: ${top.title}.`,
+    };
+  }
+
   const swapFor = nearMissTarget(findings);
   if (swapFor) {
     return {
@@ -158,6 +169,15 @@ function withImpostorReason(
       ? judgment.explanation
       : fallback,
   };
+}
+
+function revenantPriorVersion(findings: readonly Finding[]): string | null {
+  for (const finding of findings) {
+    if (finding.rule !== "revenant") continue;
+    const version = readPriorVersion(finding.detail);
+    if (version) return version;
+  }
+  return null;
 }
 
 function nearMissTarget(findings: readonly Finding[]): string | null {

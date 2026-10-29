@@ -108,6 +108,7 @@ export function resolveInstalled(rootDir: string): InstalledPackage[] {
         entry.dev === true ||
         target?.dev === true ||
         (topLevel && devNames.has(keyName) && !prodNames.has(keyName)),
+      linked: entry.link === true || entry.resolved?.toLowerCase().startsWith("file:") === true,
     });
   }
 

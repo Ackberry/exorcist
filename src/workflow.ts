@@ -4,6 +4,7 @@ import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 import { errorMessage } from "./errors.js";
 import { type OracleClient, ollamaClient } from "./oracle.js";
+import { npmRegistryClient, prefetchPackuments, type RegistryClient } from "./registry.js";
 import { resolveInstalled } from "./resolver.js";
 import { groupFindings, runRules, summarizeRules } from "./scanner.js";
 import { judgePackage } from "./scorer.js";
@@ -17,6 +18,7 @@ import type {
 } from "./types.js";
 
 const ORACLE_CLIENT = "exorcist.oracleClient";
+const REGISTRY_CLIENT = "exorcist.registryClient";
 
 const inputSchema = z.object({
   targetPath: z.string(),
@@ -32,6 +34,7 @@ const resolvedSchema = inputSchema.extend({
 
 const ruledSchema = resolvedSchema.extend({
   findings: z.array(z.custom<Finding>()),
+  registryNote: z.string().nullable(),
 });
 
 const preparedSchema = ruledSchema.extend({
@@ -81,10 +84,14 @@ const rulesStep = createStep({
   inputSchema: resolvedSchema,
   outputSchema: ruledSchema,
   retries: 0,
-  execute: async ({ inputData }) => {
+  execute: async ({ inputData, requestContext }) => {
     const packages = inputData.packages as InstalledPackage[];
-    const findings = await runRules(packages, inputData.rootDir);
-    return { ...inputData, packages, findings };
+    // One batch of registry lookups before the rules, so revenant does not make
+    // a serial request per package. A registry that is down costs the scan a
+    // note and nothing else.
+    const registry = await prefetchPackuments(packages, readRegistryClient(requestContext));
+    const findings = await runRules(packages, inputData.rootDir, registry.packuments);
+    return { ...inputData, packages, findings, registryNote: registry.note };
   },
 });
 
@@ -203,6 +210,7 @@ const scoreStep = createStep({
       rules: summarizeRules(findings),
       hauntings,
       quiet: inputData.quiet as QuietPackage[],
+      registryNote: inputData.registryNote,
       oracle: {
         requested: inputData.consultOracle,
         available: inputData.oracleAvailable,
@@ -234,9 +242,11 @@ export const hauntWorkflow = createWorkflow({
 export async function runHauntWorkflow(
   input: z.infer<typeof inputSchema>,
   client: OracleClient,
+  registryClient: RegistryClient,
 ): Promise<HauntingReport> {
   const requestContext = new RequestContext();
   requestContext.set(ORACLE_CLIENT, client);
+  requestContext.set(REGISTRY_CLIENT, registryClient);
   const tracing = await enableSentryTracing(hauntWorkflow);
   try {
     const run = await hauntWorkflow.createRun();
@@ -257,6 +267,17 @@ function readClient(requestContext: RequestContext): OracleClient {
   const client = requestContext.get(ORACLE_CLIENT);
   if (isOracleClient(client)) return client;
   return ollamaClient;
+}
+
+function readRegistryClient(requestContext: RequestContext): RegistryClient {
+  const client = requestContext.get(REGISTRY_CLIENT);
+  if (isRegistryClient(client)) return client;
+  return npmRegistryClient;
+}
+
+function isRegistryClient(value: unknown): value is RegistryClient {
+  if (typeof value !== "object" || value === null) return false;
+  return typeof (value as { packument?: unknown }).packument === "function";
 }
 
 function isOracleClient(value: unknown): value is OracleClient {

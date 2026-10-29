@@ -26,6 +26,7 @@ const pkg: InstalledPackage = {
   manifest: null,
   direct: true,
   dev: false,
+  linked: false,
 };
 
 const colorHelper: InstalledPackage = {
@@ -36,6 +37,7 @@ const colorHelper: InstalledPackage = {
   manifest: { description: "A tiny color helper for hex and rgb strings." },
   direct: true,
   dev: false,
+  linked: false,
 };
 
 function finding(evidence: string, overrides: Partial<Finding> = {}): Finding {
