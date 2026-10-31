@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildChatRequest, consult, parseJudgment } from "../src/oracle.js";
+import { buildChatRequest, consult, LOOKALIKE_SCHEMA, parseJudgment } from "../src/oracle.js";
+import { hauntingScore, ruleFloor } from "../src/scorer.js";
 import type { Finding, InstalledPackage } from "../src/types.js";
 
 /**
@@ -32,6 +33,11 @@ interface RetryTranscript extends Transcript {
 /** A full judgment: the request the client built and what the model answered. */
 interface JudgmentTranscript extends Transcript, Exchange {
   source: { scanRoot: string; package: string; rulesFired: string[] };
+}
+
+/** A lookalike judgment also names the popular package the suspect imitates. */
+interface LookalikeTranscript extends JudgmentTranscript {
+  source: JudgmentTranscript["source"] & { resembles: string };
 }
 
 function replay(exchange: Exchange): Response {
@@ -178,5 +184,94 @@ describe("a real judgment over demo/victim suspect code", () => {
     expect(judgment.score).toBe(65);
     expect(judgment.confidence).toBeCloseTo(0.75);
     expect(judgment.summary).not.toBe("");
+  });
+});
+
+describe("a real lookalike judgment over demo/victim's lodasg", () => {
+  const recorded = transcript<LookalikeTranscript>("ollama-0.40.11-lookalike-200.json");
+
+  const lodasg: InstalledPackage = {
+    name: "lodasg",
+    version: "1.0.0",
+    lockKey: "node_modules/lodasg",
+    path: null,
+    manifest: null,
+    direct: true,
+    dev: false,
+    linked: true,
+  };
+
+  const nearMiss: Finding = {
+    rule: "doppelganger",
+    lockKey: lodasg.lockKey,
+    packageName: lodasg.name,
+    version: lodasg.version,
+    severity: "high",
+    title: "name imitates lodash",
+    detail: "Near miss of lodash (one substitution). Swap lodasg for lodash.",
+    evidence: "description: The Lodash library delivering modularity, performance, and extras.",
+    evidencePath: "index.js",
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function answer(): string {
+    const message = recorded.response.body.message as { content?: string } | undefined;
+    return message?.content ?? "";
+  }
+
+  it("sent the lookalike schema because the only finding is a doppelganger", () => {
+    const request = buildChatRequest({
+      target: { endpoint: "http://127.0.0.1:9", model: recorded.model },
+      pkg: lodasg,
+      findings: [nearMiss],
+    });
+
+    expect(request.format).toEqual(LOOKALIKE_SCHEMA);
+    expect(recorded.request.format).toEqual(LOOKALIKE_SCHEMA);
+    expect(recorded.source.resembles).toBe("lodash");
+  });
+
+  it("answered impersonating as a real boolean", () => {
+    const judgment = parseJudgment(answer(), true);
+
+    expect(judgment.impersonating).toBe(true);
+    expect(judgment.verdict).toBe("suspicious");
+    expect(judgment.confidence).toBeCloseTo(0.99);
+  });
+
+  it("returned a score above the ceiling the prompt asks for", () => {
+    const system = recorded.request.messages as { role: string; content: string }[];
+    const instruction = system.find((message) => message.role === "system")?.content ?? "";
+
+    // The prompt says 40 or below. gemma3:4b answered 42. Nothing in the
+    // oracle enforces the ceiling, so the scorer has to be the one that holds.
+    expect(instruction).toContain("score stays at 40 or below");
+    expect(parseJudgment(answer(), true).score).toBe(42);
+  });
+
+  it("stays on the rule floor, so the overshoot never reaches the report", () => {
+    const judgment = parseJudgment(answer(), true);
+    const floor = ruleFloor([nearMiss]);
+
+    expect(judgment.score).toBeGreaterThan(floor);
+    expect(hauntingScore([nearMiss], judgment)).toBe(floor);
+  });
+
+  it("replays through consult with the imitated name attached", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(replay(recorded));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const judgment = await consult({
+      target: { endpoint: "http://127.0.0.1:9", model: recorded.model },
+      pkg: lodasg,
+      findings: [nearMiss],
+    });
+
+    expect(judgment.impersonating).toBe(true);
+    expect(judgment.impersonationOf).toBe("lodash");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
