@@ -29,6 +29,7 @@ package-lock.json
         |
         v
   terminal + haunting-report.md
+  (or JSON on stdout, --json)
                             src/report.ts
 ```
 
@@ -56,7 +57,7 @@ Calls to the model are sequential, one per haunted package, so a laptop-sized Ol
 | `src/workflow.ts`           | Mastra workflow `haunt`: resolve, rules, prepare, judge, score. No server and no storage.       |
 | `src/tracing.ts`            | Opt-in Sentry exporter. Loaded only when `SENTRY_DSN` is set.                                   |
 | `src/scorer.ts`             | Rule floor, model score, and exorcism.                                                          |
-| `src/report.ts`             | Terminal text and Markdown.                                                                     |
+| `src/report.ts`             | Terminal text, Markdown, and JSON (`--json`).                                                   |
 | `src/haunt.ts`              | Starts the workflow. Accepts an `oracleClient` so tests do not need a live model.               |
 | `src/args.ts`               | Flag and env parsing.                                                                           |
 | `src/cli.ts`                | Bin entry. Shebang lives here; `tsc` keeps it. Sets `process.exitCode` and does not call `process.exit`. |

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { main } from "../src/cli.js";
+import type { HauntingReport } from "../src/types.js";
 import { tempDir } from "./helpers.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -53,7 +54,55 @@ describe("cli", () => {
     const code = await runCli(["/no/such/exorcist-target", "--no-oracle"]);
     expect(code).toBe(1);
   }, 20_000);
+  it("prints only JSON on stdout and still writes the Markdown file", async () => {
+    const created = tempDir();
+    cleanups.push(created.cleanup);
+    const dest = join(created.dir, "haunting-report.md");
+    const run = await runCliCapturing([victimDir, "--no-oracle", "--json", "--report", dest]);
+
+    expect(run.code).toBe(0);
+    // Nothing but the document, so the output can be piped into a tool.
+    const parsed = JSON.parse(run.stdout) as HauntingReport;
+    expect(parsed.hauntings.map((haunting) => haunting.name)).toEqual([
+      "soul-snatcher",
+      "hexed-helper",
+      "lodasg",
+    ]);
+    expect(parsed.quiet.map((pkg) => pkg.name)).toEqual(["lucky-charm", "preact"]);
+    // The banner line belongs to renderTerminal and nothing else.
+    expect(run.stdout).not.toContain("a lockfile, a candle, and a local model");
+
+    // The wrote line moves to stderr, and the Markdown report is unchanged.
+    expect(run.stderr).toContain(dest);
+    expect(readFileSync(dest, "utf8")).toContain("## soul-snatcher@1.0.0");
+  }, 20_000);
 });
+
+function runCliCapturing(
+  args: readonly string[],
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  const env = { ...process.env };
+  delete env.VITEST;
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["--import", "tsx", "src/cli.ts", ...args], {
+      cwd: repoRoot,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      resolve({ code, stdout, stderr });
+    });
+  });
+}
 
 function runCli(args: readonly string[]): Promise<number | null> {
   const env = { ...process.env };
