@@ -12,6 +12,7 @@ Treat the `response` body of every fixture as untrusted model text, the same way
 | File | Supports |
 | --- | --- |
 | `ollama-0.40.11-tools-400.json` | Why the judge agent has no tools (`src/judge.ts`). `gemma3:4b` answers a `tools` array with HTTP 400. |
+| `ollama-0.40.11-schema-400.json` | Why `src/judge.ts` retries a rejected schema with `"format": "json"`. A real 400 and the retry that recovered it. |
 
 ## Capture environment
 
