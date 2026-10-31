@@ -1,0 +1,33 @@
+{
+  "capturedOn": "2026-10-31",
+  "ollamaVersion": "0.40.11",
+  "platform": "Windows",
+  "model": "gemma3:4b",
+  "endpoint": "/api/chat",
+  "why": "src/judge.ts builds a Mastra agent with no tools. This is the recorded refusal that forces it: gemma3:4b rejects a tools array outright, so structured output has to go out as Ollama's format schema instead of a tool call.",
+  "request": {
+    "model": "gemma3:4b",
+    "messages": [{ "role": "user", "content": "Reply with only the word READY." }],
+    "stream": false,
+    "keep_alive": -1,
+    "options": { "num_gpu": 0, "num_ctx": 4096, "num_predict": 32, "temperature": 0 },
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "report_verdict",
+          "description": "Report the verdict for a package.",
+          "parameters": {
+            "type": "object",
+            "properties": { "verdict": { "type": "string" } },
+            "required": ["verdict"]
+          }
+        }
+      }
+    ]
+  },
+  "response": {
+    "status": 400,
+    "body": { "error": "registry.ollama.ai/library/gemma3:4b does not support tools" }
+  }
+}
