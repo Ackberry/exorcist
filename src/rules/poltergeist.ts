@@ -67,8 +67,10 @@ const CODE_SIGNALS: readonly Signal[] = [
     id: "eval",
     severity: "high",
     title: "uses eval or the Function constructor",
-    detail: "The code calls eval or new Function.",
-    pattern: /\beval\s*\(|\bnew\s+Function\s*\(/,
+    detail: "The code calls eval, new Function, or Function as a plain call.",
+    // Function("return this")() runs a string the same way new Function does.
+    // The new is optional in JavaScript, so it is optional here too.
+    pattern: /\beval\s*\(|\b(?:new\s+)?Function\s*\(/,
   },
   {
     id: "base64",
@@ -78,13 +80,27 @@ const CODE_SIGNALS: readonly Signal[] = [
     pattern:
       /Buffer\.from\s*\([\s\S]{0,120}?['"]base64['"]\s*\)|\.toString\s*\(\s*['"]base64['"]\s*\)|\batob\s*\(|\bbtoa\s*\(|['"][A-Za-z0-9+/]{40,}={0,2}['"]/,
   },
+  {
+    id: "obfuscation",
+    severity: "high",
+    title: "hides names behind escapes",
+    detail:
+      "The code spells identifiers or URLs as escape sequences or character codes, which keeps the other signals from reading them.",
+    // Measured against 3,192 files in this repository's own node_modules: a run
+    // of five hex escapes, an obfuscator name, and fromCharCode with four or
+    // more arguments each matched nothing. Four hex escapes matched five files,
+    // and runs of \uNNNN stayed common at every threshold (emoji-regex and the
+    // like), so neither is used here.
+    pattern:
+      /(?:\\x[0-9a-fA-F]{2}){5,}|\b_0x[0-9a-f]{4,}\b|String\.fromCharCode\s*\(\s*\d+\s*(?:,\s*\d+\s*){3,}\)/,
+  },
 ];
 
 export const poltergeistRule: Rule = {
   kind: "poltergeist",
   status: "active",
   description:
-    "Install scripts, child processes, network calls, process.env, ~/.ssh, .npmrc, eval, and base64 payloads.",
+    "Install scripts, child processes, network calls, process.env, ~/.ssh, .npmrc, eval, base64 payloads, and escaped names.",
   scan(pkg) {
     const findings: Finding[] = [];
     const seen = new Set<string>();

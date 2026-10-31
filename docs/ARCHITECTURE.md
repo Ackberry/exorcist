@@ -44,7 +44,7 @@ Calls to the model are sequential, one per haunted package, so a laptop-sized Ol
 | --------------------------- | ----------------------------------------------------------------------------------------------- |
 | `src/types.ts`              | Shared types: packages, findings, rules, judgments, the report.                                 |
 | `src/resolver.ts`           | Lockfile v2/v3 to `InstalledPackage[]`.                                                         |
-| `src/rules/poltergeist.ts`  | Install scripts and risky APIs inside installed packages.                                       |
+| `src/rules/poltergeist.ts`  | Install scripts, risky APIs, and escaped names inside installed packages.                      |
 | `src/rules/doppelganger.ts` | Typosquat and impersonation names against `POPULAR_PACKAGES`.                                  |
 | `src/rules/revenant.ts`     | Release after a long silence, or a new maintainer on the installed version.                     |
 | `src/registry.ts`           | npm registry client, the candidate filter, and the one prefetch before the rules run.           |
