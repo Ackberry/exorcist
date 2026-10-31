@@ -1,0 +1,40 @@
+name: CodeQL
+
+# Exorcist reads untrusted package source and hands it to a local model, so the
+# interesting classes here are path traversal, unsafe file reads, and anything
+# that would send data off the machine. CodeQL is free on a public repository.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # A weekly run catches a new query release against code that has not changed.
+    - cron: "17 9 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: analyze javascript-typescript
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # security-extended adds lower-severity queries the default pack omits.
+          queries: security-extended
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript
