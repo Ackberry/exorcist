@@ -258,10 +258,25 @@ export function validateJudgment(value: unknown, lookalike = false): OracleJudgm
   return judgment;
 }
 
+const FENCE = "```";
+
+/** Body of the first ``` fence, or null when there is not a closed one. */
+function fencedBody(text: string): string | null {
+  const open = text.indexOf(FENCE);
+  if (open === -1) return null;
+  let start = open + FENCE.length;
+  // An opening fence may be tagged, as in ```json.
+  if (text.slice(start, start + 4).toLowerCase() === "json") start += 4;
+  const close = text.indexOf(FENCE, start);
+  if (close === -1) return null;
+  return text.slice(start, close);
+}
+
 function extractJson(content: string): string {
   const trimmed = content.trim();
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(trimmed);
-  const body = fenced?.[1]?.trim() ?? trimmed;
+  // Scanned with indexOf rather than a fence regexp, whose optional tag and
+  // lazy body backtrack on model text that opens a fence and never closes it.
+  const body = fencedBody(trimmed)?.trim() ?? trimmed;
   const start = body.indexOf("{");
   const end = body.lastIndexOf("}");
   if (start !== -1 && end > start) return body.slice(start, end + 1);

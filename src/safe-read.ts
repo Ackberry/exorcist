@@ -1,4 +1,12 @@
-import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -120,13 +128,23 @@ export function readOwnedFile(root: string, file: string, maxBytes: number): Own
     return { ok: false, reason: "missing" };
   }
   if (!isInside(rootReal, real)) return { ok: false, reason: "outside" };
+  // Open once, then stat and read through that descriptor. Checking the path
+  // and reading it again would let the name be repointed in between.
+  let fd: number;
   try {
-    const info = statSync(real);
-    if (!info.isFile()) return { ok: false, reason: "unreadable" };
-    if (info.size > maxBytes) return { ok: false, reason: "large" };
-    return { ok: true, text: readFileSync(real, "utf8") };
+    fd = openSync(real, constants.O_RDONLY);
   } catch {
     return { ok: false, reason: "unreadable" };
+  }
+  try {
+    const info = fstatSync(fd);
+    if (!info.isFile()) return { ok: false, reason: "unreadable" };
+    if (info.size > maxBytes) return { ok: false, reason: "large" };
+    return { ok: true, text: readFileSync(fd, "utf8") };
+  } catch {
+    return { ok: false, reason: "unreadable" };
+  } finally {
+    closeSync(fd);
   }
 }
 
@@ -137,16 +155,33 @@ export function readOwnedFile(root: string, file: string, maxBytes: number): Own
  * inside that package.
  */
 export function readFileInside(root: string, file: string, maxBytes: number): string | null {
+  let rootReal: string;
+  let real: string;
   try {
-    const rootReal = realpathSync(root);
-    const listed = lstatSync(file);
-    if (listed.isSymbolicLink() || !listed.isFile()) return null;
-    if (listed.size > maxBytes) return null;
-    const real = realpathSync(file);
-    if (!isInside(rootReal, real)) return null;
-    return readFileSync(real, "utf8");
+    rootReal = realpathSync(root);
+    real = realpathSync(file);
   } catch {
     return null;
+  }
+  if (!isInside(rootReal, real)) return null;
+  // O_NOFOLLOW refuses a symlink at the final component in the same call that
+  // opens it, so the name cannot become a link after the check. Everything
+  // after this reads the descriptor, never the path again.
+  let fd: number;
+  try {
+    fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch {
+    return null;
+  }
+  try {
+    const info = fstatSync(fd);
+    if (!info.isFile()) return null;
+    if (info.size > maxBytes) return null;
+    return readFileSync(fd, "utf8");
+  } catch {
+    return null;
+  } finally {
+    closeSync(fd);
   }
 }
 

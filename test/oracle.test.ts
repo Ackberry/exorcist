@@ -61,6 +61,7 @@ describe("oracle contract", () => {
     expect(normalizeEndpoint("127.0.0.1:11434")).toBe("http://127.0.0.1:11434");
     expect(normalizeEndpoint("https://example.test")).toBe("https://example.test");
     expect(normalizeEndpoint("http://localhost:11434/custom")).toBe("http://localhost:11434");
+    expect(normalizeEndpoint("http://localhost:11434////")).toBe("http://localhost:11434");
     expect(() => normalizeEndpoint("   ")).toThrow(CliError);
     expect(() => normalizeEndpoint("http://127.0.0.1:11434@evil.test")).toThrow(
       /username or password/,
@@ -483,5 +484,35 @@ describe("consult over HTTP", () => {
     const second = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as { format?: unknown };
     expect(first.format).toMatchObject(JUDGMENT_SCHEMA);
     expect(second.format).toBe("json");
+  });
+});
+
+describe("extractJson", () => {
+  const judgment =
+    '{"verdict":"benign","confidence":0.5,"score":10,"summary":"It logs.","explanation":"Nothing reaches out."}';
+
+  it("reads a judgment out of a tagged fence, whatever the tag's case", () => {
+    expect(parseJudgment(`\`\`\`json\n${judgment}\n\`\`\``).score).toBe(10);
+    expect(parseJudgment(`\`\`\`JSON\n${judgment}\n\`\`\``).score).toBe(10);
+    expect(parseJudgment(`\`\`\`\n${judgment}\n\`\`\``).score).toBe(10);
+  });
+
+  it("falls back to the whole answer when the fence never closes", () => {
+    expect(parseJudgment(`\`\`\`json\n${judgment}`).score).toBe(10);
+  });
+
+  it("reads a judgment with prose around it", () => {
+    expect(parseJudgment(`Here is my answer:\n${judgment}\nHope that helps.`).score).toBe(10);
+  });
+
+  it("does not stall on a long run of unclosed backticks", () => {
+    // The old fence regexp backtracked here. Model text is not trusted to be
+    // well formed, so the parse has to stay linear.
+    const hostile = `${"`".repeat(20_000)}${judgment}`;
+    const started = Date.now();
+    // An empty fence body is not a judgment, so rejecting it is right. What
+    // matters is that the answer comes back at once instead of backtracking.
+    expect(() => parseJudgment(hostile)).toThrow(OracleError);
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 });
