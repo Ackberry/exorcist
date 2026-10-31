@@ -7,7 +7,10 @@ import { hasControlChar } from "./untrusted.js";
  * `http://127.0.0.1:11434@evil.example` is a different host, so it is rejected.
  */
 export function normalizeEndpoint(value: string): string {
-  const trimmed = value.trim().replace(/\/+$/, "");
+  // Trailing slashes are stripped in a loop rather than with /\/+$/, which
+  // backtracks on a long run of them.
+  let trimmed = value.trim();
+  while (trimmed.endsWith("/")) trimmed = trimmed.slice(0, -1);
   if (trimmed === "") {
     throw new CliError("Ollama endpoint is empty.");
   }
