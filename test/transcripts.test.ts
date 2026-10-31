@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { OracleError } from "../src/errors.js";
 import { buildChatRequest, consult, LOOKALIKE_SCHEMA, parseJudgment } from "../src/oracle.js";
-import { hauntingScore, ruleFloor } from "../src/scorer.js";
+import { hauntingScore, judgePackage, ruleFloor } from "../src/scorer.js";
 import type { Finding, InstalledPackage } from "../src/types.js";
 
 /**
@@ -38,6 +39,19 @@ interface JudgmentTranscript extends Transcript, Exchange {
 /** A lookalike judgment also names the popular package the suspect imitates. */
 interface LookalikeTranscript extends JudgmentTranscript {
   source: JudgmentTranscript["source"] & { resembles: string };
+}
+
+/** An answer the client cannot use, and the message parseJudgment raises for it. */
+interface Rejection extends Exchange {
+  why: string;
+  provoked: string;
+  rejectedWith: string;
+}
+
+/** Two rejected answers, one per parseJudgment error message. */
+interface BadJsonTranscript extends Transcript {
+  emptyObject: Rejection;
+  truncated: Rejection;
 }
 
 function replay(exchange: Exchange): Response {
@@ -273,5 +287,80 @@ describe("a real lookalike judgment over demo/victim's lodasg", () => {
     expect(judgment.impersonating).toBe(true);
     expect(judgment.impersonationOf).toBe("lodash");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("model JSON that parseJudgment rejects", () => {
+  const recorded = transcript<BadJsonTranscript>("ollama-0.40.11-bad-json.json");
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function content(exchange: Exchange): string {
+    const message = exchange.response.body.message as { content?: string } | undefined;
+    return message?.content ?? "";
+  }
+
+  it("both rejections arrived as HTTP 200", () => {
+    // A judgment the client cannot use is not an HTTP failure. Nothing in the
+    // status code says the answer is unusable.
+    expect(recorded.emptyObject.response.status).toBe(200);
+    expect(recorded.truncated.response.status).toBe(200);
+  });
+
+  it("rejects an empty object, because it carries no verdict", () => {
+    const answer = content(recorded.emptyObject);
+
+    expect(JSON.parse(answer)).toEqual({});
+    expect(() => parseJudgment(answer)).toThrow(OracleError);
+    expect(() => parseJudgment(answer)).toThrow(recorded.emptyObject.rejectedWith);
+  });
+
+  it("rejects an answer the token cap cut in half", () => {
+    const answer = content(recorded.truncated);
+
+    expect(recorded.truncated.response.body.done_reason).toBe("length");
+    expect(answer).not.toContain("}");
+    expect(() => parseJudgment(answer)).toThrow(OracleError);
+    expect(() => parseJudgment(answer)).toThrow(recorded.truncated.rejectedWith);
+  });
+
+  it("rejects the truncated answer under the lookalike schema too", () => {
+    // The shape check runs after the parse, so a lookalike call fails the
+    // same way rather than reporting a missing impersonating field.
+    expect(() => parseJudgment(content(recorded.truncated), true)).toThrow(
+      "Oracle returned text that was not JSON.",
+    );
+  });
+
+  it("leaves the package on its rule floor, with the reason in oracleNote", () => {
+    // What the workflow does with the throw: no judgment, the message kept,
+    // and the score still the rule total.
+    let note: string | null = null;
+    try {
+      parseJudgment(content(recorded.emptyObject));
+    } catch (error) {
+      note = (error as Error).message;
+    }
+
+    const haunting = judgePackage(pkg, [finding], null, note);
+
+    expect(haunting.judgment).toBeNull();
+    expect(haunting.hauntingScore).toBe(ruleFloor([finding]));
+    expect(haunting.oracleNote).toBe(recorded.emptyObject.rejectedWith);
+  });
+
+  it("surfaces through consult as an OracleError, not a silent benign verdict", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(replay(recorded.truncated));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      consult({
+        target: { endpoint: "http://127.0.0.1:9", model: recorded.model },
+        pkg,
+        findings: [finding],
+      }),
+    ).rejects.toThrow(OracleError);
   });
 });
