@@ -178,6 +178,82 @@ describe("poltergeist", () => {
     expect(found[0]?.severity).toBe("medium");
   });
 
+  it("flags Function called without new, the way a globalThis shim does", () => {
+    const created = tempDir();
+    cleanups.push(created.cleanup);
+    const dir = join(created.dir, "pkg");
+    writeJson(join(dir, "package.json"), { name: "shim", version: "1.0.0" });
+    writeText(join(dir, "index.js"), 'const root = Function("return this")();\n');
+
+    const findings = poltergeistRule.scan(
+      fixturePackage({ name: "shim", lockKey: "node_modules/shim", path: dir }),
+      { rootDir: created.dir, packages: [] },
+    );
+    const found = Array.isArray(findings) ? findings : [];
+    expect(titles(found)).toEqual(["uses eval or the Function constructor"]);
+    expect(found[0]?.severity).toBe("high");
+  });
+
+  it("flags escaped names, which the other signals cannot read", () => {
+    const created = tempDir();
+    cleanups.push(created.cleanup);
+    const dir = join(created.dir, "pkg");
+    writeJson(join(dir, "package.json"), { name: "hidden", version: "1.0.0" });
+    // process.env.NPM_TOKEN spelled as escapes. Without the obfuscation signal
+    // this package carries none, so it is never sent to the oracle.
+    writeText(
+      join(dir, "index.js"),
+      'const k = ["\\x70\\x72\\x6f\\x63\\x65\\x73\\x73"];\nmodule.exports = k;\n',
+    );
+
+    const findings = poltergeistRule.scan(
+      fixturePackage({ name: "hidden", lockKey: "node_modules/hidden", path: dir }),
+      { rootDir: created.dir, packages: [] },
+    );
+    const found = Array.isArray(findings) ? findings : [];
+    expect(titles(found)).toEqual(["hides names behind escapes"]);
+    expect(found[0]?.severity).toBe("high");
+  });
+
+  it("flags an obfuscator name and a character-code string", () => {
+    const created = tempDir();
+    cleanups.push(created.cleanup);
+    const dir = join(created.dir, "pkg");
+    writeJson(join(dir, "package.json"), { name: "packed", version: "1.0.0" });
+    writeText(join(dir, "names.js"), "const _0x3f2a = 1;\nmodule.exports = _0x3f2a;\n");
+    writeText(join(dir, "codes.js"), "module.exports = String.fromCharCode(80, 79, 83, 84);\n");
+
+    const findings = poltergeistRule.scan(
+      fixturePackage({ name: "packed", lockKey: "node_modules/packed", path: dir }),
+      { rootDir: created.dir, packages: [] },
+    );
+    const found = Array.isArray(findings) ? findings : [];
+    // One signal fires once per package, on the first file in sorted order.
+    expect(titles(found)).toEqual(["hides names behind escapes"]);
+    expect(found[0]?.evidencePath).toBe("codes.js");
+  });
+
+  it("leaves short escape runs and unicode ranges alone", () => {
+    const created = tempDir();
+    cleanups.push(created.cleanup);
+    const dir = join(created.dir, "pkg");
+    writeJson(join(dir, "package.json"), { name: "ranges", version: "1.0.0" });
+    // Four hex escapes and a long run of \uNNNN. Both appear in real packages
+    // (lodash.camelcase, emoji-regex), so neither is treated as hiding.
+    writeText(
+      join(dir, "index.js"),
+      "const sep = /[\\x2d\\x2e\\x5f\\x7e]/;\n" +
+        "const emoji = /[\\u2700\\u2701\\u2702\\u2703\\u2704\\u2705\\u2706]/;\n" +
+        "module.exports = { sep, emoji };\n",
+    );
+
+    const findings = poltergeistRule.scan(
+      fixturePackage({ name: "ranges", lockKey: "node_modules/ranges", path: dir }),
+      { rootDir: created.dir, packages: [] },
+    );
+    expect(findings).toEqual([]);
+  });
+
   it("does not follow a source symlink out of the package", () => {
     const created = tempDir();
     cleanups.push(created.cleanup);
