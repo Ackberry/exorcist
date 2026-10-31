@@ -15,6 +15,7 @@ Treat the `response` body of every fixture as untrusted model text, the same way
 | `ollama-0.40.11-schema-400.json` | Why `src/judge.ts` retries a rejected schema with `"format": "json"`. A real 400 and the retry that recovered it. |
 | `ollama-0.40.11-judgment-200.json` | The `JUDGMENT_SCHEMA` happy path over `demo/victim`'s `soul-snatcher`. Scores on the 0-100 scale and does not believe the untrusted text. |
 | `ollama-0.40.11-lookalike-200.json` | The `LOOKALIKE_SCHEMA` path over `demo/victim`'s `lodasg`. `impersonating` comes back as a real boolean, and the score overshoots the prompt's ceiling, which is why `hauntingScore` holds an impersonation-only package at the rule floor. |
+| `ollama-0.40.11-bad-json.json` | Two real answers `parseJudgment` rejects, one per error message: an empty object from a schema that forbids every property, and JSON a token cap cut mid-value. Both are HTTP 200. |
 
 ## Capture environment
 
@@ -44,6 +45,10 @@ usernames out of fixtures.
 A recorded `options.num_gpu` is a capture-time addition for a box whose GPU fails to
 initialize. `buildChatRequest` does not set it, so ignore it when comparing a fixture's
 request with the one the client builds today.
+
+A fixture that records a failure says how it was provoked, in a `provoked` field, and the
+message the client raises, in `rejectedWith`. Those answers are real model output; only the
+request was altered to reach them.
 
 Record the Ollama version (`ollama --version`) and the date in the fixture. A different
 version or a different model can legitimately give a different answer; when that happens,
