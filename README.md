@@ -74,6 +74,24 @@ exorcist [path] [options]
 | `--endpoint <url>` | Ollama API. Default `http://localhost:11434`. A bare `host:port` is accepted. |
 | `--no-oracle`      | Do not call Gemma. Rules still run.                                           |
 | `--report <file>`  | Markdown report. Default `./haunting-report.md`.                              |
+| `--json`           | Print the report as JSON on stdout. The Markdown file is still written.       |
+
+### JSON output
+
+`--json` writes the same `HauntingReport` the Markdown file describes, as JSON on stdout:
+
+```bash
+npx tsx src/cli.ts demo/victim --no-oracle --json > report.json
+npx tsx src/cli.ts demo/victim --no-oracle --json | jq '.hauntings[] | {name, hauntingScore, exorcism}'
+```
+
+stdout carries the document and nothing else, so it pipes cleanly. The terminal view is
+skipped and the `wrote <file>` line goes to stderr. The Markdown report is still written,
+and `--report` still names it.
+
+Package names, evidence and model text are stripped of ANSI, C0 controls and bidi overrides,
+the same way the terminal and Markdown reports strip them. Nothing is flattened or clipped:
+evidence keeps its newlines, and long model text is not truncated.
 | `-h`, `--help`     | Help.                                                                         |
 
 Environment overrides, used when the matching flag is absent:

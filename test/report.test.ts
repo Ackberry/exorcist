@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderMarkdown, renderTerminal } from "../src/report.js";
+import { renderJson, renderMarkdown, renderTerminal } from "../src/report.js";
 import type { HauntingReport } from "../src/types.js";
 
 const report: HauntingReport = {
@@ -128,5 +128,67 @@ describe("renderMarkdown", () => {
     expect(markdown).toContain("node postinstall.js");
     expect(terminal).not.toContain("\u001B[2J");
     expect(terminal).not.toContain("\u202E");
+  });
+});
+
+describe("renderJson", () => {
+  it("round-trips the report object a caller would consume", () => {
+    const parsed = JSON.parse(renderJson(report)) as HauntingReport;
+
+    expect(parsed.target).toBe(report.target);
+    expect(parsed.packageCount).toBe(report.packageCount);
+    expect(parsed.hauntings.map((h) => h.name)).toEqual(report.hauntings.map((h) => h.name));
+    expect(parsed.quiet.map((q) => q.name)).toEqual(report.quiet.map((q) => q.name));
+    expect(parsed.rules.map((r) => r.kind)).toEqual(report.rules.map((r) => r.kind));
+    expect(parsed.registryNote).toBe(report.registryNote);
+  });
+
+  it("ends with a newline so it appends cleanly", () => {
+    expect(renderJson(report).endsWith("}\n")).toBe(true);
+  });
+
+  it("strips ANSI, C0 controls, and bidi overrides from package text", () => {
+    const haunting = report.hauntings[0];
+    const finding = haunting?.findings[0];
+    if (!haunting || !finding) throw new Error("fixture");
+    const hostile: HauntingReport = {
+      ...report,
+      target: "/work/\u001B[31mred\u001B[0m",
+      registryNote: "note\u202Ereversed",
+      hauntings: [
+        {
+          ...haunting,
+          name: "evil\u001B[2Kname",
+          exorcismReason: "reason\u0007bell",
+          findings: [{ ...finding, detail: "detail\u2066flip", evidence: "a\u0000b" }],
+        },
+      ],
+    };
+
+    const text = renderJson(hostile);
+    expect(text).not.toContain("\u001B");
+    expect(text).not.toContain("\u202E");
+    expect(text).not.toContain("\u2066");
+
+    const parsed = JSON.parse(text) as HauntingReport;
+    expect(parsed.target).toBe("/work/red");
+    expect(parsed.registryNote).toBe("notereversed");
+    expect(parsed.hauntings[0]?.name).toBe("evilname");
+    expect(parsed.hauntings[0]?.exorcismReason).toBe("reasonbell");
+    expect(parsed.hauntings[0]?.findings[0]?.detail).toBe("detailflip");
+    expect(parsed.hauntings[0]?.findings[0]?.evidence).toBe("ab");
+  });
+
+  it("keeps newlines in evidence, which the line-based reports flatten", () => {
+    const haunting = report.hauntings[0];
+    const finding = haunting?.findings[0];
+    if (!haunting || !finding) throw new Error("fixture");
+    const multiline: HauntingReport = {
+      ...report,
+      hauntings: [{ ...haunting, findings: [{ ...finding, evidence: "line one\nline two" }] }],
+    };
+
+    const parsed = JSON.parse(renderJson(multiline)) as HauntingReport;
+    expect(parsed.hauntings[0]?.findings[0]?.evidence).toBe("line one\nline two");
   });
 });

@@ -1,6 +1,12 @@
 import chalk from "chalk";
-import type { HauntingReport, PackageHaunting, Severity } from "./types.js";
-import { neutralizeMarkers, oneLineUntrusted } from "./untrusted.js";
+import type {
+  Finding,
+  HauntingReport,
+  OracleJudgment,
+  PackageHaunting,
+  Severity,
+} from "./types.js";
+import { neutralizeMarkers, oneLineUntrusted, stripUnsafe } from "./untrusted.js";
 import { readOwnVersion } from "./version.js";
 
 export function renderMarkdown(report: HauntingReport): string {
@@ -109,6 +115,86 @@ export function renderMarkdown(report: HauntingReport): string {
   );
 
   return lines.join("\n");
+}
+
+/**
+ * The same `HauntingReport`, as JSON. Package names, evidence, and model text
+ * are stripped of ANSI, C0 controls, and bidi overrides, the way the Markdown
+ * and terminal reports strip them: the file is still read by people, and a
+ * bidi override reorders what they see.
+ *
+ * Nothing is flattened or clipped. JSON has no line layout to protect, so a
+ * consumer gets the whole value rather than the one-line form the other two
+ * reports need.
+ */
+export function renderJson(report: HauntingReport): string {
+  return `${JSON.stringify(safeReport(report), null, 2)}\n`;
+}
+
+function safeReport(report: HauntingReport): HauntingReport {
+  return {
+    target: stripUnsafe(report.target),
+    scannedAt: stripUnsafe(report.scannedAt),
+    packageCount: report.packageCount,
+    // kind and status are our own constants, not package text.
+    rules: report.rules.map((rule) => ({ ...rule, description: stripUnsafe(rule.description) })),
+    hauntings: report.hauntings.map(safeHaunting),
+    quiet: report.quiet.map((pkg) => ({
+      ...pkg,
+      name: stripUnsafe(pkg.name),
+      version: stripUnsafe(pkg.version),
+    })),
+    oracle: {
+      ...report.oracle,
+      model: stripUnsafe(report.oracle.model),
+      endpoint: stripUnsafe(report.oracle.endpoint),
+      message: stripUnsafe(report.oracle.message),
+    },
+    registryNote: nullableText(report.registryNote),
+  };
+}
+
+function safeHaunting(haunting: PackageHaunting): PackageHaunting {
+  return {
+    ...haunting,
+    name: stripUnsafe(haunting.name),
+    version: stripUnsafe(haunting.version),
+    path: nullableText(haunting.path),
+    findings: haunting.findings.map(safeFinding),
+    judgment: haunting.judgment === null ? null : safeJudgment(haunting.judgment),
+    oracleNote: nullableText(haunting.oracleNote),
+    exorcismReason: stripUnsafe(haunting.exorcismReason),
+  };
+}
+
+function safeFinding(finding: Finding): Finding {
+  return {
+    ...finding,
+    lockKey: stripUnsafe(finding.lockKey),
+    packageName: stripUnsafe(finding.packageName),
+    version: stripUnsafe(finding.version),
+    title: stripUnsafe(finding.title),
+    detail: stripUnsafe(finding.detail),
+    evidence: nullableText(finding.evidence),
+    evidencePath: nullableText(finding.evidencePath),
+  };
+}
+
+function safeJudgment(judgment: OracleJudgment): OracleJudgment {
+  const safe: OracleJudgment = {
+    ...judgment,
+    summary: stripUnsafe(judgment.summary),
+    explanation: stripUnsafe(judgment.explanation),
+  };
+  // Both fields are absent on a harm-only judgment. Keep them that way.
+  if (judgment.impersonationOf !== undefined) {
+    safe.impersonationOf = nullableText(judgment.impersonationOf);
+  }
+  return safe;
+}
+
+function nullableText(value: string | null | undefined): string | null {
+  return value === null || value === undefined ? null : stripUnsafe(value);
 }
 
 export function renderTerminal(report: HauntingReport): string {

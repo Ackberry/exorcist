@@ -10,7 +10,15 @@ describe("parseArgs", () => {
       endpoint: "http://localhost:11434",
       consultOracle: true,
       reportPath: "haunting-report.md",
+      json: false,
       help: false,
+    });
+  });
+
+  it("reads --json", () => {
+    expect(parseArgs(["demo/victim", "--json"], {})).toMatchObject({
+      targetPath: "demo/victim",
+      json: true,
     });
   });
 

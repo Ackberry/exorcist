@@ -10,6 +10,8 @@ export interface CliOptions {
   endpoint: string;
   consultOracle: boolean;
   reportPath: string;
+  /** Print the report as JSON on stdout instead of the terminal view. */
+  json: boolean;
 }
 
 export function parseArgs(
@@ -21,6 +23,7 @@ export function parseArgs(
   let endpoint = normalizeEndpoint(env.OLLAMA_HOST?.trim() || DEFAULT_ENDPOINT);
   let consultOracle = true;
   let reportPath = "haunting-report.md";
+  let json = false;
   let help = false;
   let sawTarget = false;
 
@@ -33,6 +36,10 @@ export function parseArgs(
     }
     if (arg === "--no-oracle") {
       consultOracle = false;
+      continue;
+    }
+    if (arg === "--json") {
+      json = true;
       continue;
     }
     if (arg === "--model" || arg === "--endpoint" || arg === "--report") {
@@ -68,7 +75,7 @@ export function parseArgs(
 
   if (model.trim() === "") throw new CliError("Model name is empty.");
   if (hasControlChar(model)) throw new CliError("Model name contains control characters.");
-  return { help, targetPath, model, endpoint, consultOracle, reportPath };
+  return { help, targetPath, model, endpoint, consultOracle, reportPath, json };
 }
 
 export function helpText(): string {
@@ -85,12 +92,15 @@ Options:
   --endpoint <url>     Ollama API (default: ${DEFAULT_ENDPOINT}, or $OLLAMA_HOST)
   --no-oracle          Do not call Gemma. Rules still run.
   --report <file>      Markdown report path (default: ./haunting-report.md)
+  --json               Print the report as JSON on stdout. The Markdown file is
+                       still written, and progress lines go to stderr.
   -h, --help           Show this help.
 
 Examples:
   npx tsx src/cli.ts demo/victim
   npx tsx src/cli.ts demo/victim --model gemma3:1b
   node dist/cli.js demo/victim --no-oracle
+  node dist/cli.js demo/victim --no-oracle --json > report.json
 `;
 }
 

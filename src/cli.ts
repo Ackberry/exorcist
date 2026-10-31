@@ -6,7 +6,7 @@ import chalk from "chalk";
 import { type CliOptions, helpText, parseArgs } from "./args.js";
 import { errorMessage } from "./errors.js";
 import { haunt } from "./haunt.js";
-import { printTerminal, renderMarkdown } from "./report.js";
+import { printTerminal, renderJson, renderMarkdown } from "./report.js";
 
 export async function main(argv: readonly string[]): Promise<number> {
   let options: CliOptions;
@@ -33,10 +33,17 @@ export async function main(argv: readonly string[]): Promise<number> {
       endpoint: options.endpoint,
       consultOracle: options.consultOracle,
     });
-    printTerminal(report);
+    // With --json, stdout carries the JSON document and nothing else, so it
+    // can be piped. The terminal view and the wrote line move out of the way.
+    if (!options.json) printTerminal(report);
     const reportFile = resolve(options.reportPath);
     mkdirSync(dirname(reportFile), { recursive: true });
     writeFileSync(reportFile, renderMarkdown(report), "utf8");
+    if (options.json) {
+      process.stdout.write(renderJson(report));
+      console.error(chalk.dim(`wrote ${reportFile}`));
+      return 0;
+    }
     console.log("");
     console.log(chalk.dim(`wrote ${reportFile}`));
     return 0;
