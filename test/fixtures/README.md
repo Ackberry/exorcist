@@ -13,6 +13,7 @@ Treat the `response` body of every fixture as untrusted model text, the same way
 | --- | --- |
 | `ollama-0.40.11-tools-400.json` | Why the judge agent has no tools (`src/judge.ts`). `gemma3:4b` answers a `tools` array with HTTP 400. |
 | `ollama-0.40.11-schema-400.json` | Why `src/judge.ts` retries a rejected schema with `"format": "json"`. A real 400 and the retry that recovered it. |
+| `ollama-0.40.11-judgment-200.json` | The `JUDGMENT_SCHEMA` happy path over `demo/victim`'s `soul-snatcher`. Scores on the 0-100 scale and does not believe the untrusted text. |
 
 ## Capture environment
 
@@ -32,6 +33,11 @@ curl -sS -o body.json -w '%{http_code}\n' \
   -H 'Content-Type: application/json' \
   --data-binary @request.json
 ```
+
+A fixture may carry a `redactions` field. `ollama-0.40.11-judgment-200.json` replaces the
+capture machine's absolute scan root with `<scan-root>`; the path is not part of the
+behavior being recorded. Keep machine-specific paths, hostnames and usernames out of
+fixtures.
 
 Record the Ollama version (`ollama --version`) and the date in the fixture. A different
 version or a different model can legitimately give a different answer; when that happens,
