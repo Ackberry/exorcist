@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildChatRequest, consult } from "../src/oracle.js";
+import { buildChatRequest, consult, parseJudgment } from "../src/oracle.js";
 import type { Finding, InstalledPackage } from "../src/types.js";
 
 /**
@@ -27,6 +27,11 @@ interface SingleTranscript extends Transcript, Exchange {}
 interface RetryTranscript extends Transcript {
   rejected: Exchange;
   retry: Exchange;
+}
+
+/** A full judgment: the request the client built and what the model answered. */
+interface JudgmentTranscript extends Transcript, Exchange {
+  source: { scanRoot: string; package: string; rulesFired: string[] };
 }
 
 function replay(exchange: Exchange): Response {
@@ -124,5 +129,54 @@ describe("a rejected schema is sent again as plain json", () => {
     const second = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as { format?: unknown };
     expect(first.format).toBeTypeOf("object");
     expect(second.format).toBe("json");
+  });
+});
+
+describe("a real judgment over demo/victim suspect code", () => {
+  const recorded = transcript<JudgmentTranscript>("ollama-0.40.11-judgment-200.json");
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function answer(): string {
+    const message = recorded.response.body.message as { content?: string } | undefined;
+    return message?.content ?? "";
+  }
+
+  it("scored on the 0 to 100 scale, not 0 to 1", () => {
+    const judgment = parseJudgment(answer());
+
+    // asScore rounds, so a 0-to-1 answer would silently collapse to 0 or 1.
+    expect(judgment.score).toBe(65);
+    expect(Number.isInteger(judgment.score)).toBe(true);
+    expect(judgment.score).toBeGreaterThan(1);
+  });
+
+  it("did not take the untrusted text's word that the package is harmless", () => {
+    const user = recorded.request.messages as { role: string; content: string }[];
+    const prompt = user.find((message) => message.role === "user")?.content ?? "";
+
+    expect(prompt).toContain("<<<UNTRUSTED DESCRIPTION>>>");
+    expect(prompt).toContain("Harmless postinstall");
+
+    const judgment = parseJudgment(answer());
+    expect(judgment.verdict).toBe("suspicious");
+  });
+
+  it("replays through consult as a judgment the scorer can use", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(replay(recorded));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const judgment = await consult({
+      target: { endpoint: "http://127.0.0.1:9", model: recorded.model },
+      pkg,
+      findings: [finding],
+    });
+
+    expect(judgment.verdict).toBe("suspicious");
+    expect(judgment.score).toBe(65);
+    expect(judgment.confidence).toBeCloseTo(0.75);
+    expect(judgment.summary).not.toBe("");
   });
 });
