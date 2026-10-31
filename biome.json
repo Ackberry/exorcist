@@ -33,6 +33,19 @@
       "formatter": {
         "enabled": false
       }
+    },
+    {
+      "includes": ["site/src/**/*.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          },
+          "style": {
+            "noDescendingSpecificity": "off"
+          }
+        }
+      }
     }
   ],
   "assist": {

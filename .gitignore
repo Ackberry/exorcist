@@ -5,3 +5,7 @@ haunting-report.md
 coverage/
 .DS_Store
 dev-post.draft.md
+
+# site app
+site/node_modules/
+site/dist/
