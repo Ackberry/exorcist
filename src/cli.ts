@@ -7,6 +7,7 @@ import { type CliOptions, helpText, parseArgs } from "./args.js";
 import { errorMessage } from "./errors.js";
 import { haunt } from "./haunt.js";
 import { printTerminal, renderJson, renderMarkdown } from "./report.js";
+import type { HauntingReport } from "./types.js";
 
 export async function main(argv: readonly string[]): Promise<number> {
   let options: CliOptions;
@@ -42,15 +43,35 @@ export async function main(argv: readonly string[]): Promise<number> {
     if (options.json) {
       process.stdout.write(renderJson(report));
       console.error(chalk.dim(`wrote ${reportFile}`));
-      return 0;
+      return thresholdCode(report, options.failOn);
     }
     console.log("");
     console.log(chalk.dim(`wrote ${reportFile}`));
-    return 0;
+    return thresholdCode(report, options.failOn);
   } catch (error) {
     console.error(chalk.red(errorMessage(error)));
     return 1;
   }
+}
+
+/**
+ * 2 when --fail-on was given and a package met it, 0 otherwise. A separate code
+ * from 1, because "the scan ran and found something" is not "the scan broke",
+ * and a CI step needs to tell those apart.
+ */
+function thresholdCode(report: HauntingReport, failOn: number | null): number {
+  if (failOn === null) return 0;
+  const over = report.hauntings.filter((haunting) => haunting.hauntingScore >= failOn);
+  if (over.length === 0) return 0;
+  const worst = over.reduce((a, b) => (b.hauntingScore > a.hauntingScore ? b : a));
+  const others = over.length === 1 ? "" : ` and ${over.length - 1} more`;
+  console.error(
+    chalk.red(
+      `--fail-on ${failOn}: ${over.length} package${over.length === 1 ? "" : "s"} at or above it. ` +
+        `Worst: ${worst.name}@${worst.version} at ${worst.hauntingScore}/100${others}.`,
+    ),
+  );
+  return 2;
 }
 
 /** @mastra/core declares engines.node >=22.13.0. */

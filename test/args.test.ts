@@ -11,8 +11,22 @@ describe("parseArgs", () => {
       consultOracle: true,
       reportPath: "haunting-report.md",
       json: false,
+      failOn: null,
       help: false,
     });
+  });
+
+  it("reads --fail-on in both forms", () => {
+    expect(parseArgs(["--fail-on", "75"], {})).toMatchObject({ failOn: 75 });
+    expect(parseArgs(["--fail-on=0"], {})).toMatchObject({ failOn: 0 });
+    expect(parseArgs(["--fail-on", "100"], {})).toMatchObject({ failOn: 100 });
+  });
+
+  it("rejects a --fail-on that is not a score", () => {
+    expect(() => parseArgs(["--fail-on", "abc"], {})).toThrow(CliError);
+    expect(() => parseArgs(["--fail-on", "101"], {})).toThrow(/above 100/);
+    expect(() => parseArgs(["--fail-on", "7.5"], {})).toThrow(/whole number/);
+    expect(() => parseArgs(["--fail-on"], {})).toThrow(/Missing value/);
   });
 
   it("reads --json", () => {

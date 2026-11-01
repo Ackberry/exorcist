@@ -12,6 +12,11 @@ export interface CliOptions {
   reportPath: string;
   /** Print the report as JSON on stdout instead of the terminal view. */
   json: boolean;
+  /**
+   * Exit non-zero when a package scores at least this much. Null leaves the
+   * exit code alone, which is what a person running a scan by hand wants.
+   */
+  failOn: number | null;
 }
 
 export function parseArgs(
@@ -24,6 +29,7 @@ export function parseArgs(
   let consultOracle = true;
   let reportPath = "haunting-report.md";
   let json = false;
+  let failOn: number | null = null;
   let help = false;
   let sawTarget = false;
 
@@ -40,6 +46,19 @@ export function parseArgs(
     }
     if (arg === "--json") {
       json = true;
+      continue;
+    }
+    if (arg === "--fail-on") {
+      const value = argv[index + 1];
+      if (value === undefined || value.startsWith("-")) {
+        throw new CliError("Missing value for --fail-on.");
+      }
+      index += 1;
+      failOn = parseScore(value);
+      continue;
+    }
+    if (arg.startsWith("--fail-on=")) {
+      failOn = parseScore(inlineValue(arg));
       continue;
     }
     if (arg === "--model" || arg === "--endpoint" || arg === "--report") {
@@ -75,7 +94,7 @@ export function parseArgs(
 
   if (model.trim() === "") throw new CliError("Model name is empty.");
   if (hasControlChar(model)) throw new CliError("Model name contains control characters.");
-  return { help, targetPath, model, endpoint, consultOracle, reportPath, json };
+  return { help, targetPath, model, endpoint, consultOracle, reportPath, json, failOn };
 }
 
 export function helpText(): string {
@@ -94,6 +113,8 @@ Options:
   --report <file>      Markdown report path (default: ./haunting-report.md)
   --json               Print the report as JSON on stdout. The Markdown file is
                        still written, and progress lines go to stderr.
+  --fail-on <score>    Exit 2 when a package scores at least <score> (0-100).
+                       Without it a finished scan always exits 0.
   -h, --help           Show this help.
 
 Examples:
@@ -101,7 +122,26 @@ Examples:
   npx tsx src/cli.ts demo/victim --model gemma3:1b
   node dist/cli.js demo/victim --no-oracle
   node dist/cli.js demo/victim --no-oracle --json > report.json
+  node dist/cli.js . --no-oracle --fail-on 75
+
+Exit codes:
+  0  the scan finished
+  1  the scan could not run
+  2  the scan finished and --fail-on was met
 `;
+}
+
+/** A whole number from 0 to 100. Anything else is a usage error, not a scan. */
+function parseScore(value: string): number {
+  const trimmed = value.trim();
+  if (!/^\d{1,3}$/.test(trimmed)) {
+    throw new CliError(`--fail-on takes a whole number from 0 to 100, not ${trimmed}.`);
+  }
+  const score = Number(trimmed);
+  if (score > 100) {
+    throw new CliError("--fail-on cannot be above 100.");
+  }
+  return score;
 }
 
 function inlineValue(arg: string): string {

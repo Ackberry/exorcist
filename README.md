@@ -151,6 +151,48 @@ exorcist [path] [options]
 | `--no-oracle`      | Do not call Gemma. Rules still run.                                           |
 | `--report <file>`  | Markdown report. Default `./haunting-report.md`.                              |
 | `--json`           | Print the report as JSON on stdout. The Markdown file is still written.       |
+| `--fail-on <score>` | Exit 2 when a package scores at least `<score>`. Without it a finished scan always exits 0. |
+
+### Failing a build on a score
+
+`--fail-on <score>` is the only way Exorcist returns a non-zero code for what it found.
+Exit codes are:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | the scan finished |
+| 1 | the scan could not run |
+| 2 | the scan finished and `--fail-on` was met |
+
+Keeping 2 separate from 1 matters in CI: a tripped threshold is a result, a 1 is a broken
+step, and you want to tell them apart.
+
+```bash
+node dist/cli.js . --no-oracle --fail-on 75
+```
+
+The report is still written when the threshold trips, so a failing job leaves evidence.
+
+As a GitHub Action. Rules-only is the default here on purpose — a runner has no Ollama
+and no model pulled, and the scan is designed to be useful without one:
+
+```yaml
+- uses: actions/checkout@v5
+- uses: actions/setup-node@v5
+  with:
+    node-version: "22.13"
+- run: npm ci && npm run build
+- name: Scan dependencies
+  run: node dist/cli.js . --no-oracle --fail-on 75
+- if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: haunting-report
+    path: haunting-report.md
+```
+
+Pick the threshold from a real scan of your own tree rather than copying 75. Exorcist is
+noisy; see the section above.
 
 ### JSON output
 

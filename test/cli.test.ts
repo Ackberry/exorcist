@@ -76,6 +76,31 @@ describe("cli", () => {
     expect(run.stderr).toContain(dest);
     expect(readFileSync(dest, "utf8")).toContain("## soul-snatcher@1.0.0");
   }, 20_000);
+  it("exits 2 only when --fail-on is met, and 0 without the flag", async () => {
+    const created = tempDir();
+    cleanups.push(created.cleanup);
+    const dest = join(created.dir, "haunting-report.md");
+
+    // soul-snatcher is the worst package in the fixture, at 93.
+    const quiet = await main([victimDir, "--no-oracle", "--report", dest, "--fail-on", "95"]);
+    expect(quiet).toBe(0);
+
+    const tripped = await main([victimDir, "--no-oracle", "--report", dest, "--fail-on", "90"]);
+    expect(tripped).toBe(2);
+
+    // A scan with no threshold is still a success, which is what a person wants.
+    const plain = await main([victimDir, "--no-oracle", "--report", dest]);
+    expect(plain).toBe(0);
+
+    // The report is written either way, so a failing gate still leaves evidence.
+    expect(readFileSync(dest, "utf8")).toContain("## soul-snatcher@1.0.0");
+  });
+
+  it("separates a tripped threshold from a broken scan", async () => {
+    // 1 means the scan could not run. 2 means it ran and found something.
+    expect(await main(["/no/such/exorcist-target", "--no-oracle", "--fail-on", "1"])).toBe(1);
+    expect(await main([victimDir, "--no-oracle", "--fail-on", "abc"])).toBe(1);
+  });
 });
 
 function runCliCapturing(
