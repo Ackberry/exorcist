@@ -1,12 +1,88 @@
 # Exorcist
 
-Exorcist scans an npm project's **installed** dependencies for malicious or risky packages. Cheap rules flag suspects. Only those suspects are shown to **Gemma**, running locally through **Ollama**. A **Mastra** workflow runs the scan. Its judge is a Mastra agent with structured output and no tools, because `gemma3:4b` on Ollama does not support tool calls. Gemma reads the flagged code against the package's stated purpose and returns a risk score plus a verdict: benign, suspicious, or malicious. The score cannot go below the total from the rules.
+**A CLI that scans your installed npm dependencies for malicious packages.** Four
+deterministic rules pick the suspects. A Gemma 3 4B model running locally on your own
+machine reads each one and decides what it is actually doing. Nothing leaves the laptop.
 
-It is a small scanner for the DEV Hacktoberfest Open-Source AI Challenge, "Ghost in the Machine" (deadline Sat Oct 31, 2026). Poltergeist, doppelganger, phantom, and revenant all flag packages today.
+[![CI](https://github.com/Ackberry/exorcist/actions/workflows/ci.yml/badge.svg)](https://github.com/Ackberry/exorcist/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Ackberry/exorcist/actions/workflows/codeql.yml/badge.svg)](https://github.com/Ackberry/exorcist/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Node 22.13+](https://img.shields.io/badge/node-22.13%2B-informational)
 
-The code it reads may be private. The model runs on your machine, the scan works with the network unplugged, and nothing here calls a cloud LLM API. Revenant asks the public npm registry for publish dates; with no network it finds nothing and the scan carries on.
+![A scan of demo/victim printing line by line: five packages, three haunted, then soul-snatcher at 93 out of 100 marked remove, hexed-helper at 60 marked remove, lodasg at 28 marked swap, and two quiet packages](docs/media/exorcist-scan.gif)
 
-A scan does not follow a symlink out of a package, a lockfile path into a credential directory, or a redirect from Ollama. A `file:` dependency is read only when its real path stays inside the git repository that contains the project. If the project is not in a git checkout, that path has to stay inside the parent of the scanned directory, and that parent is never your home directory. `--endpoint` is the Ollama origin. A username, a password, or a redirect is refused.
+<details>
+<summary>The same scan as text</summary>
+
+```text
+$ exorcist demo/victim --no-oracle
+
+packages  5 installed · 3 haunted · 2 quiet
+
+soul-snatcher@1.0.0
+  █████████░   93/100  remove  direct
+  critical    runs a postinstall script
+  medium      reads process.env
+  medium      contains a base64 payload
+  medium      installed but never imported
+  exorcism  remove — Haunting score 93/100 is at least 75.
+
+lodasg@1.0.0
+  ███░░░░░░░   28/100  swap  direct
+  high        name imitates lodash
+  exorcism  swap — Swap lodasg for lodash.
+
+quiet
+  lucky-charm@1.0.0
+  preact@1.0.0
+```
+
+</details>
+
+## What it looks for
+
+| Ghost | What it catches | Severity |
+| --- | --- | --- |
+| **Poltergeist** | Install hooks, and risky APIs anywhere in the package: `child_process`, network modules, `process.env`, SSH paths, `.npmrc`, `eval` / `Function`, base64 blobs, and names hidden behind `\xNN` escapes | up to critical |
+| **Doppelganger** | Typosquats and impersonation — `lodasg` pretending to be `lodash` | high |
+| **Phantom** | A direct dependency nothing imports, requires, or names in a root script. Its install hooks still run | medium |
+| **Revenant** | A release after 365+ days of silence, or under a maintainer the previous release did not have | medium |
+
+Rules are the cheap filter: regexes and lockfile arithmetic, run against files on disk.
+Only packages a rule flags are sent to the model, and quiet packages are never sent at
+all. The rule total is a **floor** — Gemma can raise a package's score and can never
+lower one.
+
+Each package comes back with a score out of 100 and one fix: `pin`, `swap`, or `remove`.
+
+## Is it any good?
+
+Honest answer: it is noisy, and the repo says so rather than hiding it. Scanning this
+project's own 346 dependencies, rules-only, flags 100 of them — mostly revenant findings
+at `pin`, which means "shipped again after a long quiet", which is suspicious and also
+completely normal. One is a genuine false positive: `trough` read as a typosquat of
+`through`. Treat the score as a starting point for a person, not a gate to automate on.
+
+Every claim this README and the write-up make about `gemma3:4b` has a real recorded
+response checked into [`test/fixtures/`](test/fixtures/) — the tools refusal, a rejected
+schema and the retry that recovers it, the judgment path, the lookalike path, and two
+answers the parser rejects. The test suite replays them and never contacts Ollama.
+
+## Safety
+
+The code it reads may be private. The model runs on your machine, the scan works with the
+network unplugged, and nothing here calls a cloud LLM API. Revenant asks the public npm
+registry for publish dates; with no network it finds nothing and the scan carries on.
+**Exorcist reads package source. It never executes it.**
+
+A scan does not follow a symlink out of a package, a lockfile path into a credential
+directory, or a redirect from Ollama. A `file:` dependency is read only when its real path
+stays inside the git repository that contains the project. If the project is not in a git
+checkout, that path has to stay inside the parent of the scanned directory, and that
+parent is never your home directory. `--endpoint` is the Ollama origin. A username, a
+password, or a redirect is refused.
+
+Built for the DEV Hacktoberfest Open-Source AI Challenge, Week 4: "Ghost in the Machine".
 
 ## Quickstart
 

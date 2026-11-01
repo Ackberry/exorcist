@@ -1,6 +1,6 @@
 # Week 4 submission checklist
 
-Read on 2026-10-28. This is a checklist for the DEV Hacktoberfest Open-Source AI Challenge, Week 4, "Ghost in the Machine". It is not a submission.
+Read on 2026-10-28, status table refreshed 2026-10-31. This is a checklist for the DEV Hacktoberfest Open-Source AI Challenge, Week 4, "Ghost in the Machine". It is not a submission.
 
 Sources:
 
@@ -70,13 +70,16 @@ From `docs/STATUS.md`, `docs/ARCHITECTURE.md`, and `README.md`.
 | Requirement | Status |
 | --- | --- |
 | First commit `d1eaa75` is 2026-10-27, inside the Entry Period | done |
-| Local Gemma (`gemma3:4b` via Ollama) judges suspects. Not fine-tuned, not served on Google Cloud. Local is one of the three Gemma modes. | done |
-| The open model is what makes the project work | todo in the write-up. The scan still writes a rules-only report when Ollama is down or `--no-oracle` is set. Gemma can raise the score and cannot lower it. |
-| Mastra workflow `haunt` (`src/workflow.ts`) runs resolve, rules, the judge, and the score. The judge (`src/judge.ts`) is a Mastra agent over Gemma, with structured output, no tools, and no memory. | done for "orchestrate an agent over open models". Memory, tools, and GitHub-issue triage are not in this repo. `gemma3:4b` on Ollama returns HTTP 400 if given tools. |
-| Sentry traces or screenshots of setup, latency, tokens, cost, and debugging | code is opt-in via `SENTRY_DSN` (`src/tracing.ts`, Mastra `SentryExporter`). Screenshots for the write-up are still todo. No DSN is committed. |
-| A live `.tech` name claimed through Hacktoberfest, linked in the post | todo. This file does not claim that promo. |
-| One published DEV post: template, both tags, demo link or video, repo link, theme, and the four category names | todo. `demo/victim` is a local demo, not a deployed URL or a video. |
-| Optional agent-session embed | todo. See below. |
+| Repository public, MIT licensed, so a judge can read the code | done. Made public 2026-10-31. |
+| Local Gemma (`gemma3:4b` via Ollama) judges suspects | done. Local inference is one of the three Gemma modes the category names. |
+| The open model is what makes the project work | done in the write-up. The post is explicit that the scan still produces a rules-only report when Ollama is down, and that Gemma raises a score but can never lower one. |
+| Mastra workflow `haunt` (`src/workflow.ts`) runs resolve, rules, prepare, judge, score. The judge is a Mastra agent over an open model, structured output, no tools | done. `gemma3:4b` answers a tools array with HTTP 400, recorded in `test/fixtures/ollama-0.40.11-tools-400.json`. |
+| Sentry traces or screenshots of setup, latency, tokens | done. Real traces captured 2026-10-31: `invoke_workflow haunt` with five `workflow.step` spans, plus `gen_ai.invoke_agent` and `chat gemma3:4b` spans carrying `gen_ai.usage.input_tokens` 675, `output_tokens` 69, `total_tokens` 744. Screenshot cropped to exclude the `user.geo` attributes Sentry infers from the ingest IP. No DSN is committed. |
+| Verifiable claims about the model | done. Five recorded transcripts in `test/fixtures/`, replayed by `test/transcripts.test.ts`. The suite never contacts Ollama. |
+| Code quality a judge might check | done. 121 tests, Biome and `tsc` clean, CodeQL on every push with 0 open alerts, `npm audit --audit-level=high` clean. |
+| A live `.tech` name claimed through Hacktoberfest, linked in the post | not done. The promo was not claimed, so that category is not entered. |
+| One published DEV post: template, both tags, demo link or video, repo link, theme, category names | drafted in `dev-post.draft.md`. Outstanding: the demo link or video, the Sentry screenshot URL, the Spirit section, and `published: true`. |
+| Optional agent-session embed | not done. Cursor is not in DevRelay's supported `tool_name` list. The post links the 20 merged PRs instead. |
 
 ## Agent sessions
 
