@@ -9,6 +9,11 @@ machine reads each one and decides what it is actually doing. Nothing leaves the
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node 22.13+](https://img.shields.io/badge/node-22.13%2B-informational)
 
+![A scan of demo/victim printing line by line: five packages, three haunted, then soul-snatcher at 93 out of 100 marked remove, hexed-helper at 60 marked remove, lodasg at 28 marked swap, and two quiet packages](docs/media/exorcist-scan.gif)
+
+<details>
+<summary>The same scan as text</summary>
+
 ```text
 $ exorcist demo/victim --no-oracle
 
@@ -31,6 +36,8 @@ quiet
   lucky-charm@1.0.0
   preact@1.0.0
 ```
+
+</details>
 
 ## What it looks for
 
