@@ -68,6 +68,26 @@ response checked into [`test/fixtures/`](test/fixtures/) — the tools refusal, 
 schema and the retry that recovers it, the judgment path, the lookalike path, and two
 answers the parser rejects. The test suite replays them and never contacts Ollama.
 
+## What a scan costs
+
+Tracing is opt-in behind `SENTRY_DSN` and off otherwise. With it on, one scan is a single
+`invoke_workflow haunt` transaction: five `workflow.step` spans, plus a
+`gen_ai.invoke_agent` span and a `chat gemma3:4b` child for every package the rules
+flagged.
+
+![Sentry span attributes for the Gemma judge call: op gen_ai.invoke_agent, agent name Gemma judge, response model gemma3:4b, and usage of 675 input tokens, 69 output and 744 total](docs/media/sentry-trace.png)
+
+`resolve`, `rules` and `score` together come to about eleven milliseconds for five
+packages. Everything else is the model. That is the whole case for rules-as-a-filter:
+the deterministic pass is effectively free, so the expensive part only runs on packages
+something already flagged, and quiet packages are never sent at all.
+
+The `environment` tag on that span reads `replayed-fixture` because the model host was
+unreachable when it was captured, so the answers came from `test/fixtures/`. The token
+counts are the real ones from those recorded responses. The durations are not — ignore
+`tokens_per_second` there; real `gemma3:4b` on that machine runs at about 13 tokens per
+second.
+
 ## Safety
 
 The code it reads may be private. The model runs on your machine, the scan works with the
